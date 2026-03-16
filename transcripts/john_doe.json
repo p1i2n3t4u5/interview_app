@@ -1,0 +1,42 @@
+[
+  {
+    "question": "The job description mentions Java 17. Can you discuss some significant features introduced in Java 8 and beyond (e.g., Streams, Optionals, Records, Sealed Classes) that you've found particularly useful for building high-performance, scalable microservices, and how you've specifically applied them in your projects?",
+    "answer": "Java 8 introduced streams and functional programming which helped simplify collection processing and parallel operations. We used streams extensively in data transformation pipelines. Optional helped eliminate null pointer issues in service responses. In newer versions like Java 17 we used records for immutable DTOs and sealed classes for domain modeling. This significantly reduced boilerplate code and improved maintainability of microservices."
+  },
+  {
+    "question": "You've built microservices for a high-scale e-commerce platform. Describe the most challenging architectural decision you had to make in that project regarding service decomposition or inter-service communication patterns. How did you justify your choice, and what were the trade-offs, particularly concerning consistency and performance?",
+    "answer": "One major decision was choosing between synchronous REST communication and asynchronous messaging using Kafka. Initially REST was simpler but created tight coupling between services. We switched to event-driven architecture with Kafka which improved scalability and fault tolerance. The trade-off was eventual consistency, which we managed through idempotent consumers and retry mechanisms."
+  },
+  {
+    "question": "In your experience with Kafka for high-volume systems, how do you ensure message delivery guarantees (at-least-once, at-most-once, exactly-once) in a distributed microservices environment?",
+    "answer": "We used idempotent producers and Kafka transactions to achieve exactly-once semantics. Consumers implemented idempotent processing by storing processed message IDs. For at-least-once guarantees we relied on manual offset commits after successful processing. Dead-letter queues were used for failed messages."
+  },
+  {
+    "question": "Imagine a critical Spring Boot microservice in production is experiencing intermittent high latency and occasional timeouts under peak load. Walk me through your debugging strategy.",
+    "answer": "First I would analyze monitoring dashboards such as Prometheus and Grafana to identify spikes in latency or resource usage. Next I would inspect application logs in ELK. If the issue appears JVM related I would capture thread dumps and use Java Flight Recorder. I would also check database connection pools, thread pool utilization, and Kafka lag metrics to isolate the bottleneck."
+  },
+  {
+    "question": "Can you explain the core advantages Kubernetes provides over just using Docker for deploying and managing microservices?",
+    "answer": "Docker provides containerization but Kubernetes provides orchestration. Kubernetes handles auto-scaling, service discovery, rolling deployments, and self-healing. In our deployment we used Kubernetes Deployments for application management, Services for networking, and Horizontal Pod Autoscaler for scaling based on CPU and Kafka lag."
+  },
+  {
+    "question": "When designing a scalable microservices system on AWS, what services and patterns do you consider essential?",
+    "answer": "We typically use AWS services like RDS for relational data, DynamoDB for high throughput workloads, S3 for storage, and CloudWatch for monitoring. For scalability we use load balancers and autoscaling groups. For fault tolerance we deploy services across multiple availability zones and use message queues like Kafka or SQS to decouple services."
+  },
+  {
+    "question": "Describe how you've handled distributed data consistency across microservices.",
+    "answer": "We used the Saga pattern for distributed transactions. Each service executed a local transaction and published events to trigger the next step. Compensation transactions were used to rollback changes in case of failures. This approach provided eventual consistency without blocking distributed transactions."
+  },
+  {
+    "question": "What code-level and infrastructure optimizations would you apply to improve performance of a high-volume microservice?",
+    "answer": "Code-level optimizations include using efficient data structures, caching frequently accessed data with Redis, and batch processing database operations. Infrastructure optimizations include tuning JVM parameters, scaling Kafka consumers, and improving database indexing strategies."
+  },
+  {
+    "question": "Describe your approach to distributed tracing, centralized logging, and monitoring.",
+    "answer": "We implemented distributed tracing using OpenTelemetry with Jaeger for visualization. Logs were centralized using the ELK stack. Prometheus and Grafana were used for metrics monitoring. These tools allowed us to trace requests across microservices and quickly identify latency bottlenecks."
+  },
+  {
+    "question": "Design a real-time notification service capable of sending millions of notifications per day.",
+    "answer": "I would design the system using Kafka as the message backbone to decouple producers and consumers. A notification service would process messages and route them to channel-specific workers for email, SMS, or push notifications. Each worker would scale horizontally using Kubernetes. Failed messages would be retried using retry topics and dead-letter queues. Monitoring and rate limiting would be implemented to prevent overload."
+  }
+]

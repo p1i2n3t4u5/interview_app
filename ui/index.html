@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>AI Hiring Platform</title>
+      <style>
+         body{
+         font-family: Arial;
+         margin:0;
+         background:#f4f6fb;
+         }
+         /* Header */
+         header{
+         background:#1f2937;
+         color:white;
+         padding:18px;
+         text-align:center;
+         font-size:22px;
+         }
+         /* Layout */
+         .container{
+         display:grid;
+         grid-template-columns: 280px 1fr;
+         }
+         /* Sidebar */
+         .sidebar{
+         background:#111827;
+         color:white;
+         height:100vh;
+         padding:20px;
+         }
+         .sidebar h3{
+         margin-top:0;
+         }
+         .sidebar button{
+         width:100%;
+         padding:10px;
+         margin:6px 0;
+         border:none;
+         background:#374151;
+         color:white;
+         cursor:pointer;
+         }
+         .sidebar button:hover{
+         background:#4b5563;
+         }
+         /* Content */
+         .content{
+         padding:30px;
+         }
+         .card{
+         background:white;
+         padding:20px;
+         margin-bottom:25px;
+         border-radius:10px;
+         box-shadow:0 3px 8px rgba(0,0,0,0.08);
+         }
+         .card h2{
+         margin-top:0;
+         }
+         /* Inputs */
+         input,select,textarea{
+         width:100%;
+         padding:8px;
+         margin:6px 0;
+         border:1px solid #ddd;
+         border-radius:5px;
+         }
+         textarea{
+         height:120px;
+         }
+         button.action{
+         background:#2563eb;
+         color:white;
+         padding:8px 14px;
+         border:none;
+         border-radius:6px;
+         cursor:pointer;
+         }
+         button.action:hover{
+         background:#1d4ed8;
+         }
+         pre{
+         background:#0f172a;
+         color:#22c55e;
+         padding:10px;
+         overflow:auto;
+         border-radius:6px;
+         }
+         #questionBox{
+         font-weight:bold;
+         margin-bottom:10px;
+         }
+         .chart-container{
+         width: 100%;
+         max-width: 800px;
+         margin: auto;
+         }
+
+      canvas{
+      width: 100% !important;
+      height: auto !important;
+      }
+      </style>
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+   </head>
+   <body>
+      <header>
+         AI Hiring & Interview Platform
+      </header>
+      <div class="container">
+         <!-- SIDEBAR -->
+         <div class="sidebar">
+            <h3>Navigation</h3>
+            <button onclick="showBlock('resume')">Resume Upload</button>
+            <button onclick="showBlock('gap')">JD Gap Analysis</button>
+            <button onclick="showBlock('compare')">Compare Candidates</button>
+            <button onclick="showBlock('knowledge')">Knowledge Base</button>
+            <button onclick="showBlock('interview')">AI Interview</button>
+            <button onclick="showBlock('submit-transcript')">Submit Transcript</button>
+            <button onclick="showBlock('reports')">Reports</button>
+         </div>
+         <!-- MAIN CONTENT -->
+         <div class="content">
+            <!-- Resume Upload -->
+            <div class="card block" id="resume">
+               <h2>Resume Upload</h2>
+               <!--               <h3>Single Resume</h3>-->
+               <!--               <input id="candidateNameResume" placeholder="Candidate Name">-->
+               <!--               <input type="file" id="resumeFile">-->
+               <!--               <button class="action" onclick="uploadResume()">Upload Resume</button>-->
+               <!--               <h3>Multiple Resumes</h3>-->
+               <input type="file" id="multiResumes" multiple>
+               <button class="action" onclick="uploadMultipleResumes()">Upload</button>
+               <pre id="resumeResult"></pre>
+            </div>
+            <!-- Gap Analysis -->
+            <div class="card block" id="gap" style="display:none">
+               <h2>Resume vs JD Gap Analysis</h2>
+               <input type="text" id="candidateSearchGap" onkeyup="searchCandidate()" placeholder="Search candidate">
+               <select id="candidateSelectElement" onchange="selectCandidate()">
+                  <option value="">Select Candidate</option>
+               </select>
+               <input type="file" id="jdGapFile">
+               <button class="action" onclick="gapAnalysisNew()">Upload JD & Analyze</button>
+               <pre id="gapResult"></pre>
+            </div>
+            <!-- Candidate Compare -->
+            <div class="card block" id="compare" style="display:none">
+               <h2>Compare Candidates</h2>
+               <label>Upload JD</label>
+               <input type="file" id="compareJD">
+               <label>Upload Resumes</label>
+               <input type="file" id="compareResumes" multiple>
+               <label>Top N</label>
+               <input type="number" id="topN" value="5">
+               <button class="action" onclick="compareCandidates()">Find Top Candidates</button>
+               <pre id="rankingResult"></pre>
+            </div>
+            <!-- Knowledge -->
+            <div class="card block" id="knowledge" style="display:none">
+               <h2>Knowledge Base</h2>
+               <input type="file" id="knowledgeFile">
+               <button class="action" onclick="uploadKnowledge()">Upload Knowledge</button>
+               <button class="action" onclick="listKnowledge()">List Files</button>
+               <pre id="knowledgeResult"></pre>
+            </div>
+            <!-- AI Interview -->
+            <div class="card block" id="interview" style="display:none">
+               <h2>AI Interview</h2>
+               <input type="text" id="candidateSearchInterview" onkeyup="searchCandidateInterview()" placeholder="Search candidate">
+               <select id="candidateSelectInterview" onchange="selectCandidateInterview()">
+                  <option value="">Select Candidate</option>
+               </select>
+               <input id="candidateNameInterview" placeholder="Candidate Name" readonly>
+               <button class="action" onclick="startInterview()">Start Interview</button>
+               <div id="interviewArea" style="display:none">
+                  <div id="questionBox"></div>
+                  <textarea id="answerInput" placeholder="Type answer"></textarea>
+                  <button class="action" onclick="sendAnswer()">Submit Answer</button>
+                  <button class="action" onclick="startVoice()">🎤 Speak</button>
+                  <pre id="transcriptArea"></pre>
+               </div>
+            </div>
+            <div class="card block" id="submit-transcript" style="display:none">
+               <h2>Submit Transcript Manually</h2>
+               <input type="text" id="candidateSearchSubmitTranscript" onkeyup="searchCandidateSubmitTranscript()" placeholder="Search candidate">
+               <select id="candidateSelectSubmitTranscript" onchange="selectCandidateSubmitTranscript()">
+                  <option value="">Select Candidate</option>
+               </select>
+               <textarea id="manualTranscript" placeholder='Paste transcript JSON array here'></textarea>
+               <button class="action" onclick="submitTranscript()">Submit Transcript</button>
+               <pre id="submitResult"></pre>
+            </div>
+            <!-- Reports -->
+            <div class="card block" id="reports" style="display:none">
+               <h2>Reports & Analytics</h2>
+               <input type="text"
+                  id="candidateSearchReport"
+                  onkeyup="searchCandidateForReportAnalytics()"
+                  placeholder="Search candidate">
+               <select id="candidateSelectReport"
+                  onchange="selectCandidateForReportAnalytics()">
+                  <option value="">Select Candidate</option>
+               </select>
+               <button class="action" onclick="getReport()">Interview Report</button>
+               <button class="action" onclick="getAnalytics()">Analytics</button>
+               <h3>Skill Radar</h3>
+                <div class="chart-container">
+               <canvas id="skillRadarChart" ></canvas>
+                   <div>
+               <h3>Interview Score Trend</h3>
+                <div class="chart-container">
+               <canvas id="scoreTrendChart" ></canvas>
+                 <div>
+               <h3>Candidate Comparison</h3>
+               <div class="chart-container">
+               <canvas id="comparisonChart" ></canvas>
+               </div>
+               <pre id="reportResult"></pre>
+               <pre id="analyticsResult"></pre>
+            </div>
+         </div>
+      </div>
+      <script>
+         function showBlock(name){
+
+         document.querySelectorAll(".block").forEach(b=>{
+             b.style.display="none"
+         })
+
+         document.getElementById(name).style.display="block"
+         }
+
+      </script>
+      <script src="/ui/app.js"></script>
+   </body>
+</html>

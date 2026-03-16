@@ -1,0 +1,18 @@
+John Doe
+Senior Java Developer
+
+Experience: 8 years
+
+Skills:
+- Java
+- Spring Boot
+- Kafka
+- Microservices
+- AWS
+- Docker
+
+Projects:
+Built microservices architecture using Spring Boot and Kafka for high scale ecommerce platform.
+
+Education:
+B.Tech Computer Science

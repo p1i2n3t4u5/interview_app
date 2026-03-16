@@ -1,0 +1,10 @@
+[
+  {
+    "question": "Java 17 features beneficial for enterprise applications?",
+    "answer": "Java 17 introduced several improvements like sealed classes, records, pattern matching for instanceof, and better garbage collection tuning. In one of my microservices projects we used records for immutable DTOs which reduced boilerplate code. We also used sealed classes to restrict domain model hierarchies and improve maintainability. For performance tuning we leveraged G1GC and JVM tuning to handle high throughput Kafka consumers."
+  },
+  {
+    "question": "Java 17 features beneficial for enterprise applications?",
+    "answer": "Java 17 introduced several improvements like sealed classes, records, pattern matching for instanceof, and better garbage collection tuning. In one of my microservices projects we used records for immutable DTOs which reduced boilerplate code. We also used sealed classes to restrict domain model hierarchies and improve maintainability. For performance tuning we leveraged G1GC and JVM tuning to handle high throughput Kafka consumers."
+  }
+]

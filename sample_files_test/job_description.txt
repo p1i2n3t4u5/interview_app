@@ -1,0 +1,14 @@
+Position: Senior Java Developer
+
+Required Skills:
+- Java 17
+- Spring Boot
+- Kafka
+- Microservices
+- Kubernetes
+- AWS
+
+Responsibilities:
+- Design scalable microservices
+- Implement event-driven architecture
+- Optimize high-volume systems

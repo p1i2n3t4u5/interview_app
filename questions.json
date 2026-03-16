@@ -1,0 +1,190 @@
+{
+  "Java 17": {
+
+    "beginner": [
+      "What are the main new features introduced in Java 17?",
+      "What is the difference between JDK, JRE, and JVM?",
+      "What are records in Java and why were they introduced?",
+      "What are sealed classes in Java 17?",
+      "Explain the concept of garbage collection in Java."
+    ],
+
+    "intermediate": [
+      "Explain how the Java memory model works.",
+      "What is the difference between HashMap and ConcurrentHashMap?",
+      "How does Java handle thread synchronization?",
+      "Explain the concept of virtual threads introduced in newer Java versions.",
+      "How does Java's garbage collector decide when to free memory?"
+    ],
+
+    "advanced": [
+      "Explain different garbage collection algorithms used by the JVM.",
+      "How would you diagnose a memory leak in a Java application?",
+      "Explain how the JVM handles Just-In-Time compilation.",
+      "What are the performance implications of using synchronized blocks?",
+      "Explain how Java handles concurrency under the hood."
+    ]
+  },
+
+  "Spring Boot": {
+
+    "beginner": [
+      "What is Spring Boot and how is it different from Spring Framework?",
+      "What is auto-configuration in Spring Boot?",
+      "What is the purpose of the application.properties file?",
+      "What is Spring Boot starter dependency?",
+      "What is dependency injection in Spring?"
+    ],
+
+    "intermediate": [
+      "Explain how Spring Boot auto-configuration works internally.",
+      "What is the difference between @Component, @Service, and @Repository?",
+      "How do you implement exception handling in Spring Boot?",
+      "What is Spring Boot Actuator and how is it used?",
+      "How does Spring Boot handle configuration profiles?"
+    ],
+
+    "advanced": [
+      "Explain how Spring Boot manages bean lifecycle.",
+      "How would you design a scalable REST API using Spring Boot?",
+      "How do you optimize startup performance in Spring Boot?",
+      "Explain how Spring Boot integrates with distributed tracing tools.",
+      "How would you debug a circular dependency issue in Spring Boot?"
+    ]
+  },
+
+  "Kafka": {
+
+    "beginner": [
+      "What is Apache Kafka and what problem does it solve?",
+      "What is a Kafka topic?",
+      "What is the difference between a producer and a consumer?",
+      "What is a Kafka partition?",
+      "What is a Kafka broker?"
+    ],
+
+    "intermediate": [
+      "Explain how Kafka ensures message durability.",
+      "What is the role of ZooKeeper in Kafka?",
+      "How does Kafka handle consumer groups?",
+      "Explain Kafka offset management.",
+      "How does Kafka guarantee message ordering?"
+    ],
+
+    "advanced": [
+      "How does Kafka achieve high throughput?",
+      "Explain Kafka replication and leader election.",
+      "What happens if a Kafka broker fails?",
+      "How would you design a high-scale Kafka streaming system?",
+      "Explain exactly-once delivery semantics in Kafka."
+    ]
+  },
+
+  "Microservices": {
+
+    "beginner": [
+      "What are microservices?",
+      "How are microservices different from monolithic architecture?",
+      "What are the advantages of microservices?",
+      "What is service discovery in microservices?",
+      "What is an API gateway?"
+    ],
+
+    "intermediate": [
+      "How do microservices communicate with each other?",
+      "What are the challenges of microservice architecture?",
+      "Explain circuit breaker pattern.",
+      "How do you handle distributed transactions in microservices?",
+      "What is the role of service mesh?"
+    ],
+
+    "advanced": [
+      "How would you design a resilient microservices architecture?",
+      "Explain the Saga pattern.",
+      "How do you handle data consistency in microservices?",
+      "What are anti-patterns in microservices architecture?",
+      "How would you debug cascading failures in microservices?"
+    ]
+  },
+
+  "Kubernetes": {
+
+    "beginner": [
+      "What is Kubernetes?",
+      "What is a pod in Kubernetes?",
+      "What is a container orchestration system?",
+      "What is the difference between a pod and a container?",
+      "What is a Kubernetes deployment?"
+    ],
+
+    "intermediate": [
+      "Explain Kubernetes services.",
+      "What is a Kubernetes namespace?",
+      "How does Kubernetes handle scaling?",
+      "What are liveness and readiness probes?",
+      "Explain the role of kube-scheduler."
+    ],
+
+    "advanced": [
+      "How does Kubernetes perform rolling updates?",
+      "Explain Kubernetes networking model.",
+      "How would you troubleshoot a failing pod?",
+      "What are Kubernetes operators?",
+      "How do you implement multi-region Kubernetes clusters?"
+    ]
+  },
+
+  "AWS": {
+
+    "beginner": [
+      "What is AWS?",
+      "What is EC2?",
+      "What is S3?",
+      "What is AWS Lambda?",
+      "What is IAM?"
+    ],
+
+    "intermediate": [
+      "Explain the difference between EC2 and Lambda.",
+      "What is a VPC?",
+      "What is an AWS load balancer?",
+      "How does AWS auto scaling work?",
+      "What is CloudWatch?"
+    ],
+
+    "advanced": [
+      "Design a highly available architecture on AWS.",
+      "How do you secure a production AWS environment?",
+      "Explain AWS networking architecture.",
+      "How would you design a fault-tolerant system on AWS?",
+      "Explain cost optimization strategies in AWS."
+    ]
+  },
+
+  "Event-driven architecture": {
+
+    "beginner": [
+      "What is event-driven architecture?",
+      "What is an event?",
+      "What is the difference between event-driven and request-response architecture?",
+      "What are event producers and consumers?",
+      "Why are events useful in distributed systems?"
+    ],
+
+    "intermediate": [
+      "How does event streaming work?",
+      "What are event brokers?",
+      "How do you handle event ordering?",
+      "Explain event sourcing.",
+      "What are common challenges in event-driven systems?"
+    ],
+
+    "advanced": [
+      "How do you guarantee event delivery in distributed systems?",
+      "Explain CQRS in event-driven architecture.",
+      "How do you design scalable event pipelines?",
+      "How would you debug an event-driven system?",
+      "What are the trade-offs of event-driven architecture?"
+    ]
+  }
+}

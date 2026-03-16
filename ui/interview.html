@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Interview Session</title>
+    <link rel="stylesheet" href="/ui/interview.css">
+</head>
+<body>
+    <!-- Loading State -->
+    <div id="loadingState" class="state-container">
+        <div class="spinner"></div>
+        <p>Validating your interview link...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="state-container" style="display: none;">
+        <div class="error-icon">&#10007;</div>
+        <h2>Unable to Start Interview</h2>
+        <p id="errorMessage">This link is invalid or has expired.</p>
+        <p class="help-text">Please contact your recruiter for a new invitation link.</p>
+    </div>
+
+    <!-- Permission Request State -->
+    <div id="permissionState" class="state-container" style="display: none;">
+        <h1>Welcome, <span id="candidateName"></span>!</h1>
+        <p class="subtitle">AI-Powered Interview Session</p>
+
+        <div class="permission-card">
+            <h3>Before we begin, we need access to your camera and microphone.</h3>
+            <p>This is required for the interview session. Please click the button below and allow access when prompted by your browser.</p>
+
+            <div class="permission-status">
+                <div class="status-item">
+                    <span id="cameraStatus" class="status-dot pending"></span>
+                    <span>Camera</span>
+                </div>
+                <div class="status-item">
+                    <span id="micStatus" class="status-dot pending"></span>
+                    <span>Microphone</span>
+                </div>
+            </div>
+
+            <button id="enableMediaBtn" onclick="requestMediaAccess()">Enable Camera & Microphone</button>
+
+            <p id="permissionError" class="permission-error" style="display: none;">
+                Permission denied. Please allow camera and microphone access in your browser settings and try again.
+            </p>
+        </div>
+    </div>
+
+    <!-- Ready State (after permissions granted) -->
+    <div id="readyState" class="state-container" style="display: none;">
+        <h1>You're all set, <span id="readyCandidateName"></span>!</h1>
+        <p class="subtitle">Your camera and microphone are working.</p>
+
+        <div class="video-container">
+            <video id="videoPreview" autoplay playsinline muted></video>
+        </div>
+
+        <div class="ready-info">
+            <div class="permission-status">
+                <div class="status-item">
+                    <span class="status-dot granted"></span>
+                    <span>Camera Ready</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-dot granted"></span>
+                    <span>Microphone Ready</span>
+                </div>
+            </div>
+            <p class="ready-message">Click the button below when you are ready to start your AI interview.</p>
+            <button id="startInterviewBtn" onclick="startInterview()">Start Interview</button>
+        </div>
+    </div>
+
+    <!-- Interview State -->
+    <div id="interviewState" style="display: none;">
+        <div class="interview-layout">
+            <!-- Sidebar -->
+            <div class="interview-sidebar">
+                <div class="video-container-small">
+                    <video id="interviewVideo" autoplay playsinline muted></video>
+                </div>
+                <div class="interview-status">
+                    <span id="statusIndicator" class="status-indicator listening"></span>
+                    <span id="statusText">Connecting...</span>
+                </div>
+                <div class="progress-section">
+                    <div class="progress-label">Progress</div>
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <div id="progressText" class="progress-text">0 / 30</div>
+                </div>
+                <div class="skill-badge" id="skillBadge" style="display: none;">
+                    <span class="skill-label">Skill:</span>
+                    <span id="currentSkill">-</span>
+                </div>
+            </div>
+
+            <!-- Main area -->
+            <div class="interview-main">
+                <div id="transcriptDisplay" class="transcript-display"></div>
+
+                <div id="answerArea" class="answer-area" style="display: none;">
+                    <div class="answer-header">
+                        <span id="statusIcon" class="pulse-dot"></span>
+                        <span id="answerStatus">Listening...</span>
+                    </div>
+                    <div id="answerPreview" class="answer-preview"></div>
+                    <div class="answer-actions">
+                        <button id="submitAnswerBtn" onclick="manualSubmit()" disabled>Submit Answer</button>
+                        <textarea id="textAnswer" class="text-fallback" placeholder="Or type your answer here..." rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Complete State -->
+    <div id="completeState" class="state-container" style="display: none;">
+        <div class="complete-icon">&#10003;</div>
+        <h1>Interview Complete!</h1>
+        <p id="completeMessage">Thank you for completing the interview.</p>
+        <p class="help-text">Your responses have been recorded and will be reviewed by the hiring team.</p>
+    </div>
+
+    <script src="/ui/interview.js"></script>
+</body>
+</html>
