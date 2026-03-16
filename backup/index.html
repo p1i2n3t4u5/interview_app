@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Hiring Platform</title>
+    <link rel="stylesheet" href="/ui/style.css">
+    <style>
+        body { font-family: Arial; margin: 40px; background: #f5f7fb; }
+        h1 { text-align: center; }
+        section { background: white; padding: 20px; margin-bottom: 25px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 120px; }
+        button { margin-top: 10px; padding: 8px 14px; cursor: pointer; }
+        pre { background: #111; color: #0f0; padding: 10px; overflow: auto; }
+        #questionBox { font-weight: bold; margin-bottom: 10px; }
+        select { width: 100%; padding: 5px; margin-top: 5px; margin-bottom: 5px; }
+        input[type=text], input[type=number], input[type=file] { width: 100%; padding: 5px; margin: 5px 0; }
+        input[readonly] { background: #eee; }
+    </style>
+</head>
+<body>
+    <h1>AI Hiring & Interview Platform</h1>
+
+    <!-- BLOCK 1 — Resume Upload -->
+    <section>
+        <h2>Block 1 — Resume Upload</h2>
+        <h3>Single Resume</h3>
+        <input id="candidateNameResume" placeholder="Candidate Name">
+        <input type="file" id="resumeFile">
+        <button onclick="uploadResume()">Upload Resume</button>
+
+        <h3>Multiple Resumes</h3>
+        <input type="file" id="multiResumes" multiple>
+        <button onclick="uploadMultipleResumes()">Upload Multiple Resumes</button>
+
+        <pre id="resumeResult"></pre>
+    </section>
+
+    <!-- BLOCK 2 — Resume vs JD Gap Analysis -->
+   <section>
+    <h2>Block 2 — Resume vs JD Gap Analysis</h2>
+
+    <!-- Candidate search -->
+    <input type="text" id="candidateSearchGap" onkeyup="searchCandidateGap()" placeholder="Search candidate..."/>
+    <select id="candidateSelectGap" onchange="selectCandidateGap()">
+        <option value="">Select Candidate</option>
+    </select>
+    <pre id="gapSearchResult"></pre>
+
+    <!-- Upload JD -->
+    <input type="file" id="jdGapFile">
+    <button onclick="gapAnalysisNew()">Upload JD & Analyze</button>
+    <pre id="gapResult"></pre>
+ </section>
+
+    <!-- BLOCK 3 — Compare Candidates -->
+    <section>
+        <h2>Block 3 — Compare Candidates</h2>
+        <label>Upload JD</label>
+        <input type="file" id="compareJD">
+        <label>Upload Multiple Resumes</label>
+        <input type="file" id="compareResumes" multiple>
+        <input type="number" id="topN" value="5">
+        <button onclick="compareCandidates()">Find Top Candidates</button>
+        <pre id="rankingResult"></pre>
+    </section>
+
+    <!-- Knowledge Base -->
+    <section>
+        <h2>Knowledge Base</h2>
+        <input type="file" id="knowledgeFile">
+        <button onclick="uploadKnowledge()">Upload Knowledge</button>
+        <button onclick="listKnowledge()">List Files</button>
+        <pre id="knowledgeResult"></pre>
+    </section>
+
+    <!-- AI Interview -->
+    <section>
+        <h2>AI Interview</h2>
+        <input type="text" id="candidateSearchInterview" onkeyup="searchCandidateInterview()" placeholder="Search candidate..."/>
+        <select id="candidateSelectInterview" onchange="selectCandidateInterview()">
+            <option value="">Select Candidate</option>
+        </select>
+        <pre id="interviewSearchResult"></pre>
+
+        <input id="candidateNameInterview" placeholder="Candidate Name" readonly>
+        <button onclick="startInterview()">Start Interview</button>
+
+        <div id="interviewArea" style="display:none;">
+            <div id="questionBox"></div>
+            <textarea id="answerInput" placeholder="Type answer"></textarea>
+            <br>
+            <button onclick="sendAnswer()">Submit Answer</button>
+            <button onclick="startVoice()">🎤 Speak</button>
+            <button onclick="submitTranscript()">Submit Transcript</button>
+            <button onclick="getTranscript()">Get Transcript</button>
+            <pre id="transcriptArea"></pre>
+        </div>
+    </section>
+
+    <!-- Reports & Analytics -->
+    <section>
+        <h2>Reports & Analytics</h2>
+        <input type="text" id="candidateSearchReport" onkeyup="searchCandidateReport()" placeholder="Search candidate..."/>
+        <select id="candidateSelectReport" onchange="selectCandidateReport()">
+            <option value="">Select Candidate</option>
+        </select>
+        <pre id="reportSearchResult"></pre>
+
+        <input id="candidateNameReport" placeholder="Candidate Name" readonly>
+        <button onclick="getReport()">Interview Report</button>
+        <button onclick="getAnalytics()">Analytics</button>
+        <pre id="reportResult"></pre>
+        <pre id="analyticsResult"></pre>
+    </section>
+
+    <script src="/ui/app.js"></script>
+</body>
+</html>
