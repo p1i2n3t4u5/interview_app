@@ -410,6 +410,39 @@ Rules:
 
     return extract_json_array(response)
 
+
+
+def categorize_skills_llm(skills):
+    prompt = f"""
+You are a technical hiring expert.
+
+Group the following technical skills into logical engineering categories.
+
+Skills:
+{skills}
+
+Return JSON in this format:
+
+{{
+ "Backend":[],
+ "Frontend":[],
+ "Cloud":[],
+ "DevOps":[],
+ "Messaging":[],
+ "Database":[],
+ "Architecture":[],
+ "Testing":[]
+}}
+
+Only include categories that have skills.
+"""
+    return extract_json_object(llm(prompt))
+
+
+
+
+
+
 # =========================
 # Upload Resume
 # =========================
@@ -709,18 +742,11 @@ def compute_skill_scores(transcript):
 
 @app.get("/interview_report/{candidate}")
 def report(candidate):
-
     data = get_candidate(candidate)
-
-    if not data:
-        return {"error": "Candidate not found"}
-
     transcript = data.get("transcript", [])
-
-    if not transcript:
-        return {"error": "No transcript available"}
-
     skill_scores = compute_skill_scores(transcript)
+    skill_categories = categorize_skills_llm(list(skill_scores.keys()))
+    category_scores = compute_category_scores(skill_scores, skill_categories)
 
     prompt = f"""
 Generate final hiring recommendation.
@@ -741,9 +767,11 @@ Return JSON:
 
     return {
         "candidate": candidate,
-        "transcript": transcript,
         "skill_scores": skill_scores,
-        "report": report
+        "skill_categories": skill_categories,
+        "category_scores": category_scores,
+        "report": report,
+        "transcript": transcript
     }
 
 # =========================
@@ -1501,3 +1529,15 @@ def upload_photo(payload: PhotoUpload):
 
 
 
+def compute_category_scores(skill_scores, skill_categories):
+
+    category_scores = {}
+    for category, skills in skill_categories.items():
+        scores = [
+            skill_scores[s]
+            for s in skills
+            if s in skill_scores
+        ]
+        if scores:
+            category_scores[category] = sum(scores) / len(scores)
+    return category_scores
