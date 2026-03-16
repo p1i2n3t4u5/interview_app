@@ -21,6 +21,9 @@ from fastapi.responses import FileResponse
 from fastapi import Form
 from pydantic import BaseModel
 from tinydb import TinyDB, Query
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 
 # =========================
@@ -46,16 +49,21 @@ bedrock = boto3.client(
     aws_session_token=AWS_SESSION_TOKEN
 )
 
-ses = boto3.client(
-    "ses",
+SENDER_EMAIL = os.getenv("SENDER_EMAIL", "gmohammed2@lululemon.com")
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+
+s3_client = boto3.client(
+    "s3",
     region_name=AWS_REGION,
     aws_access_key_id=AWS_ACCESS_KEY_ID,
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     aws_session_token=AWS_SESSION_TOKEN
 )
-
-SENDER_EMAIL = os.getenv("SENDER_EMAIL", "")
-BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+S3_BUCKET = os.getenv("S3_BUCKET", "interview-photos")
 
 polly = boto3.client(
     "polly",
@@ -1019,39 +1027,42 @@ class EmailRequest(BaseModel):
     name: str
     email: str
     id: str
-    total_questions: int = 0
 
 
 def send_interview_email(to_email, candidate_name, interview_url):
-    ses.send_email(
-        Source=SENDER_EMAIL,
-        Destination={"ToAddresses": [to_email]},
-        Message={
-            "Subject": {"Data": "Your Interview Invitation", "Charset": "UTF-8"},
-            "Body": {
-                "Html": {
-                    "Charset": "UTF-8",
-                    "Data": f"""
-                    <html>
-                    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                        <h2 style="color: #2c3e50;">Hello {candidate_name},</h2>
-                        <p>You have been invited to an AI-powered interview session.</p>
-                        <p>Please click the button below to begin your interview. Make sure you have a working camera and microphone before starting.</p>
-                        <div style="text-align: center; margin: 30px 0;">
-                            <a href="{interview_url}"
-                               style="background-color: #3498db; color: white; padding: 14px 28px; text-decoration: none; border-radius: 5px; font-size: 16px;">
-                                Start Interview
-                            </a>
-                        </div>
-                        <p style="color: #7f8c8d; font-size: 13px;">This link is valid for {TOKEN_EXPIRY_HOURS} hours and can only be used once.</p>
-                        <p>Best regards,<br>AI Interview Platform</p>
-                    </body>
-                    </html>
-                    """
-                }
-            }
-        }
-    )
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your Interview Invitation"
+    msg["From"] = SENDER_EMAIL
+    msg["To"] = to_email
+
+    html_body = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2c3e50;">Hello {candidate_name},</h2>
+        <p>You have been invited to an AI-powered interview session.</p>
+        <p>Please click the button below to begin your interview. Make sure you have a working camera and microphone before starting.</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{interview_url}"
+               style="background-color: #3498db; color: white; padding: 14px 28px; text-decoration: none; border-radius: 5px; font-size: 16px;">
+                Start Interview
+            </a>
+        </div>
+        <p style="color: #7f8c8d; font-size: 13px;">This link is valid for {TOKEN_EXPIRY_HOURS} hours and can only be used once.</p>
+        <p>Best regards,<br>AI Interview Platform</p>
+    </body>
+    </html>
+    """
+    msg.attach(MIMEText(html_body, "html"))
+
+    if SMTP_HOST:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            if SMTP_USER:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+    else:
+        print(f"[EMAIL] No SMTP configured. Interview email for {candidate_name} <{to_email}>:")
+        print(f"  Interview Link: {interview_url}")
 
 
 @app.post("/send_email")
@@ -1063,13 +1074,12 @@ def send_email(payload: EmailRequest):
     token = generate_interview_token(payload.id, payload.email, payload.name)
     interview_url = f"{BASE_URL}/interview?token={token}"
 
-    # Store custom question count if provided
-    if payload.total_questions > 0:
-        Token = Query()
-        interview_tokens_table.update(
-            {"total_questions": payload.total_questions},
-            Token.token == token
-        )
+    # Always store the configured question count from env/config
+    Token = Query()
+    interview_tokens_table.update(
+        {"total_questions": INTERVIEW_TOTAL_QUESTIONS},
+        Token.token == token
+    )
 
     email_status = "sent"
     email_error = None
@@ -1083,6 +1093,7 @@ def send_email(payload: EmailRequest):
         "status": email_status,
         "token": token,
         "interview_url": interview_url,
+        "total_questions": INTERVIEW_TOTAL_QUESTIONS,
         **({"email_error": email_error} if email_error else {})
     }
 
@@ -1104,7 +1115,8 @@ def validate_token_endpoint(token: str = QueryParam(...)):
         "candidate_name": record["candidate_name"],
         "candidate_email": record["candidate_email"],
         "resume_summary": candidate.get("summary", "") if candidate else "",
-        "jd_skills": candidate.get("jd_skills", []) if candidate else []
+        "jd_skills": candidate.get("jd_skills", []) if candidate else [],
+        "total_questions": record.get("total_questions", INTERVIEW_TOTAL_QUESTIONS)
     }
 
 
@@ -1173,22 +1185,32 @@ TASK 1 - Analyze the answer (internal analysis, NOT shared with candidate):
 - Does the depth match their resume experience?
 - Any signs of fabrication (vague generalities, buzzword stuffing, contradictions)?
 
-TASK 2 - Generate the next question:
-- If the answer appears shallow, ask a DEEPER follow-up on the SAME topic to help the candidate demonstrate their understanding
+TASK 2 - Determine the response type:
+- If the candidate asks you to REPEAT the question (e.g. "could you please repeat", "say that again", "I didn't catch that", "can you repeat"), set response_type to "repeat" and put the SAME question back in next_question.question (rephrased slightly for clarity).
+- If the candidate says they CANNOT HEAR you (e.g. "I can't hear you", "no audio", "your voice is not working"), set response_type to "clarification" and respond helpfully — mention there is a text input area where they can read and type responses.
+- If the candidate gives a very short non-answer (e.g. just "hello", "hi", "okay", "yes", "no" without elaboration), set response_type to "encouragement" and gently encourage them to elaborate on the current question.
+- Otherwise, set response_type to "normal" and generate the next question as described below.
+
+TASK 3 - Generate the next question (only for response_type "normal"):
+- ALWAYS start the question with a brief, natural transition from the candidate's previous answer. Examples: "Great insight about caching strategies!", "That's interesting how you approached the microservices migration.", "Thanks for sharing your experience with Kafka."
+- Then ask the new question.
+- If the answer appears shallow, ask a DEEPER follow-up on the SAME topic
 - Otherwise, move to a new skill area from the resume/JD
 - Progress difficulty as the interview progresses
 - Cover diverse skills across the interview
 - Question {question_number} of {total_questions} total
 
 CRITICAL RULES:
-1. NEVER repeat a question you already asked. Each question MUST be unique and different from all previous questions in the transcript.
-2. ALWAYS generate a proper TECHNICAL question. Never generate interview management messages, termination notices, or meta-commentary.
-3. The next_question.question field must ONLY contain a technical interview question, nothing else.
-4. Even if candidate answers poorly, stay professional and keep asking new technical questions.
-5. NEVER tell the candidate the interview is terminated or that they failed. Just keep asking questions.
-6. Be encouraging - if a candidate struggles, simplify the question or move to a different topic.
-7. NEVER include phrases like "interview terminated", "qualification misrepresentation", "blacklisting", "fraud", or similar harsh language.
-8. Score fairly but keep moving forward with new questions regardless of scores.
+1. NEVER repeat a question you already asked (unless response_type is "repeat"). Each new question MUST be unique.
+2. ALWAYS generate a proper TECHNICAL question for response_type "normal". Never generate interview management messages.
+3. Even if candidate answers poorly, stay professional and keep asking new technical questions.
+4. NEVER tell the candidate the interview is terminated or that they failed.
+5. Be encouraging - if a candidate struggles, simplify the question or move to a different topic.
+6. NEVER include phrases like "interview terminated", "qualification misrepresentation", "blacklisting", "fraud", or similar harsh language.
+7. Score fairly but keep moving forward with new questions regardless of scores.
+8. For "repeat" type: Include a kind preamble like "Of course! Let me rephrase that for you." before the question.
+9. For "clarification" type: Be helpful and warm, e.g. "I understand! You can read my questions in the chat area above, and use the text input box below to type your answers."
+10. For "encouragement" type: Be gentle, e.g. "I'd love to hear more about that! Could you elaborate on..." and re-ask the current question.
 
 Return ONLY this JSON:
 {{
@@ -1203,6 +1225,7 @@ Return ONLY this JSON:
     "follow_up_needed": false,
     "follow_up_reason": ""
   }},
+  "response_type": "normal",
   "next_question": {{
     "question": "",
     "skill_area": "",
@@ -1355,11 +1378,12 @@ async def ai_interview_ws(ws: WebSocket, token: str):
 
             analysis = result.get("analysis", {})
             next_q = result.get("next_question", {})
+            response_type = result.get("response_type", "normal")
 
             # Save to transcript
             entry = {
                 "question_number": question_number,
-                "type": "follow_up" if next_q.get("is_follow_up") else "question",
+                "type": response_type if response_type != "normal" else ("follow_up" if next_q.get("is_follow_up") else "question"),
                 "question": current_question,
                 "answer": answer_text,
                 "skill_area": current_skill,
@@ -1376,10 +1400,12 @@ async def ai_interview_ws(ws: WebSocket, token: str):
 
             # Prepare next question
             current_question = next_q.get("question", "Tell me more about your experience.")
-            current_skill = next_q.get("skill_area", "general")
+            current_skill = next_q.get("skill_area", current_skill)
             current_difficulty = next_q.get("difficulty", "intermediate")
 
-            question_number += 1
+            # Only advance question counter for normal responses
+            if response_type == "normal":
+                question_number += 1
 
         # Interview complete
         scores = [e["analysis"].get("score", 0) for e in ai_transcript if "analysis" in e]
@@ -1412,6 +1438,66 @@ async def ai_interview_ws(ws: WebSocket, token: str):
         candidate_data["ai_interview_transcript"] = ai_transcript
         candidate_data["interview_status"] = "disconnected"
         save_candidate(candidate_data)
+
+
+# =========================
+# Photo Capture to S3
+# =========================
+
+class PhotoUpload(BaseModel):
+    token: str
+    photo: str
+    flag: str = ""
+
+@app.post("/upload_photo")
+def upload_photo(payload: PhotoUpload):
+    record, error = validate_token(payload.token)
+    if error:
+        return {"error": error}
+
+    # Strip data URI prefix if present
+    photo_data = payload.photo
+    if "," in photo_data:
+        photo_data = photo_data.split(",", 1)[1]
+
+    photo_bytes = base64.b64decode(photo_data)
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+    flag_suffix = f"_{payload.flag}" if payload.flag else ""
+    key = f"interviews/{record['candidate_id']}/{record['token']}/{timestamp}{flag_suffix}.jpg"
+
+    try:
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=key,
+            Body=photo_bytes,
+            ContentType="image/jpeg"
+        )
+
+        # Generate a presigned URL valid for 7 days
+        photo_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": S3_BUCKET, "Key": key},
+            ExpiresIn=7 * 24 * 3600
+        )
+
+        # Save photo link in candidate DB
+        candidate_data = get_candidate_by_id(record["candidate_id"])
+        if candidate_data:
+            photos = candidate_data.get("interview_photos", [])
+            photos.append({
+                "s3_key": key,
+                "url": photo_url,
+                "flag": payload.flag,
+                "timestamp": timestamp,
+                "token": record["token"]
+            })
+            candidate_data["interview_photos"] = photos
+            save_candidate(candidate_data)
+
+        return {"status": "uploaded", "key": key, "url": photo_url}
+    except Exception as e:
+        return {"status": "upload_failed", "error": str(e)}
 
 
 
