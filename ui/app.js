@@ -360,8 +360,9 @@ async function getReport(){
             JSON.stringify(data,null,2)
         renderSkillRadar(data.skill_scores)
         renderScoreTrend(data.transcript || [])
-        renderSkillCategoryChart(data.skill_scores)
+        renderSkillScoreChart(data.skill_scores)
         renderStrengthWeaknessChart(data.transcript)
+        renderSkillCategoryChart(data.category_scores)
     }catch(err){
         console.error(err)
         resultBox.textContent =
@@ -693,51 +694,45 @@ function renderSkillRadar(skillScores){
 //Skill Category Analysis
 //=======================
 
-function computeCategoryScores(skillScores){
+//function computeCategoryScores(skillScores){
+//    const categoryScores = {}
+//    Object.keys(skillScores).forEach(category => {
+//        const skills = skillCategories[category]
+//        let total = 0
+//        let count = 0
+//
+//        skills.forEach(skill => {
+//            if(skillScores[skill] !== undefined){
+//                total += skillScores[skill]
+//                count++
+//            }
+//        })
+//
+//        categoryScores[category] = count ? (total / count).toFixed(2) : 0
+//    })
+//
+//    return categoryScores
+//}
 
-    const categoryScores = {}
+let skillChart
 
-    Object.keys(skillCategories).forEach(category => {
+function renderSkillScoreChart(skillScores){
+//    const categoryScores = computeCategoryScores(skillScores)
+    const labels = Object.keys(skillScores)
+    const data = Object.values(skillScores)
 
-        const skills = skillCategories[category]
+    const ctx = document.getElementById("skillScoreChart")
 
-        let total = 0
-        let count = 0
-
-        skills.forEach(skill => {
-            if(skillScores[skill] !== undefined){
-                total += skillScores[skill]
-                count++
-            }
-        })
-
-        categoryScores[category] = count ? (total / count).toFixed(2) : 0
-    })
-
-    return categoryScores
-}
-
-let categoryChart
-
-function renderSkillCategoryChart(skillScores){
-
-    const categoryScores = computeCategoryScores(skillScores)
-
-    const labels = Object.keys(categoryScores)
-    const data = Object.values(categoryScores)
-
-    const ctx = document.getElementById("skillCategoryChart")
-
-    if(categoryChart){
-        categoryChart.destroy()
+    if(skillChart){
+        skillChart.destroy()
     }
 
-    categoryChart = new Chart(ctx,{
+    skillChart = new Chart(ctx,{
         type:"bar",
         data:{
             labels:labels,
             datasets:[{
-                label:"Category Score",
+                label:"Skill Score",
                 data:data
             }]
         },
@@ -813,6 +808,42 @@ function renderStrengthWeaknessChart(transcript){
             scales:{
                 x:{ stacked:true },
                 y:{ stacked:true }
+            }
+        }
+    })
+}
+
+
+let categoryChart
+
+function renderSkillCategoryChart(categoryScores){
+
+    const labels = Object.keys(categoryScores)
+    const data = Object.values(categoryScores)
+
+    const ctx = document
+        .getElementById("skillCategoryChart")
+
+    if(categoryChart){
+        categoryChart.destroy()
+    }
+
+    categoryChart = new Chart(ctx,{
+        type:"bar",
+        data:{
+            labels:labels,
+            datasets:[{
+                label:"Category Score",
+                data:data
+            }]
+        },
+        options:{
+            responsive:true,
+            scales:{
+                y:{
+                    min:0,
+                    max:10
+                }
             }
         }
     })

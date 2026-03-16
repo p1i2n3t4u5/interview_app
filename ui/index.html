@@ -205,25 +205,33 @@
       </select>
       <button class="action" onclick="getReport()">Interview Report</button>
       <button class="action" onclick="getAnalytics()">Analytics</button>
-      <h3>Skill Radar</h3>
       <div class="chart-container">
-      <canvas id="skillRadarChart" ></canvas>
-      <div>
-         <h3>Interview Score Trend</h3>
-         <div class="chart-container">
-            <canvas id="scoreTrendChart" ></canvas>
+         <div>
             <div>
+               <h3>Skill Radar</h3>
+               <div class="chart-container">
+                  <canvas id="skillRadarChart" ></canvas>
+               </div>
+               <h3>Interview Score Trend</h3>
+               <div class="chart-container">
+                  <canvas id="scoreTrendChart" ></canvas>
+               </div>
                <h3>Candidate Comparison</h3>
                <div class="chart-container">
                   <canvas id="comparisonChart" ></canvas>
                </div>
                <h3>skill Category Chart</h3>
                <div class="chart-container">
-                  <canvas id="skillCategoryChart"></canvas>
+                  <canvas id="skillScoreChart"></canvas>
                </div>
                <h3>Strength vs Weakness Analysis</h3>
                <div class="chart-container">
                   <canvas id="strengthWeaknessChart"></canvas>
+               </div>
+
+               <h3>Skill Category Chart</h3>
+               <div class="chart-container">
+               <canvas id="skillCategoryChart"></canvas>
                </div>
                <pre id="reportResult"></pre>
                <pre id="analyticsResult"></pre>
@@ -239,7 +247,6 @@
 
          document.getElementById(name).style.display="block"
          }
-
       </script>
       <script src="/ui/app.js"></script>
    </body>
