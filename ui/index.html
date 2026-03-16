@@ -101,6 +101,25 @@
          width: 100% !important;
          height: auto !important;
          }
+
+         .dashboard-grid{
+    display:grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap:20px;
+    margin-top:20px;
+}
+
+.chart-card{
+    background:white;
+    padding:15px;
+    border-radius:10px;
+    box-shadow:0 3px 8px rgba(0,0,0,0.08);
+}
+
+.chart-card canvas{
+    width:100% !important;
+    height:300px !important;
+}
       </style>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
    </head>
@@ -194,49 +213,45 @@
       </div>
       <!-- Reports -->
       <div class="card block" id="reports" style="display:none">
-      <h2>Reports & Analytics</h2>
-      <input type="text"
-         id="candidateSearchReport"
-         onkeyup="searchCandidateForReportAnalytics()"
-         placeholder="Search candidate">
-      <select id="candidateSelectReport"
-         onchange="selectCandidateForReportAnalytics()">
-         <option value="">Select Candidate</option>
-      </select>
-      <button class="action" onclick="getReport()">Interview Report</button>
-      <button class="action" onclick="getAnalytics()">Analytics</button>
-      <div class="chart-container">
-         <div>
-            <div>
+         <h2>Reports & Analytics</h2>
+         <input type="text"
+            id="candidateSearchReport"
+            onkeyup="searchCandidateForReportAnalytics()"
+            placeholder="Search candidate">
+         <select id="candidateSelectReport"
+            onchange="selectCandidateForReportAnalytics()">
+            <option value="">Select Candidate</option>
+         </select>
+         <button class="action" onclick="getReport()">Interview Report</button>
+         <button class="action" onclick="getAnalytics()">Analytics</button>
+         <div class="dashboard-grid">
+            <div class="chart-card">
                <h3>Skill Radar</h3>
-               <div class="chart-container">
-                  <canvas id="skillRadarChart" ></canvas>
-               </div>
+               <canvas id="skillRadarChart"></canvas>
+            </div>
+            <div class="chart-card">
                <h3>Interview Score Trend</h3>
-               <div class="chart-container">
-                  <canvas id="scoreTrendChart" ></canvas>
-               </div>
+               <canvas id="scoreTrendChart"></canvas>
+            </div>
+            <div class="chart-card">
                <h3>Candidate Comparison</h3>
-               <div class="chart-container">
-                  <canvas id="comparisonChart" ></canvas>
-               </div>
-               <h3>skill Category Chart</h3>
-               <div class="chart-container">
-                  <canvas id="skillScoreChart"></canvas>
-               </div>
+               <canvas id="comparisonChart"></canvas>
+            </div>
+            <div class="chart-card">
+               <h3>Skill Score Chart</h3>
+               <canvas id="skillScoreChart"></canvas>
+            </div>
+            <div class="chart-card">
                <h3>Strength vs Weakness Analysis</h3>
-               <div class="chart-container">
-                  <canvas id="strengthWeaknessChart"></canvas>
-               </div>
-
+               <canvas id="strengthWeaknessChart"></canvas>
+            </div>
+            <div class="chart-card">
                <h3>Skill Category Chart</h3>
-               <div class="chart-container">
                <canvas id="skillCategoryChart"></canvas>
-               </div>
-               <pre id="reportResult"></pre>
-               <pre id="analyticsResult"></pre>
             </div>
          </div>
+         <pre id="reportResult"></pre>
+         <pre id="analyticsResult"></pre>
       </div>
       <script>
          function showBlock(name){
