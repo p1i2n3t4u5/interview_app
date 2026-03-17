@@ -23,6 +23,7 @@ from fastapi import Form
 from pydantic import BaseModel
 from tinydb import TinyDB, Query
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -66,7 +67,6 @@ s3_client = boto3.client(
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     aws_session_token=AWS_SESSION_TOKEN
 )
-S3_BUCKET = os.getenv("S3_BUCKET", "interview-photos")
 S3_INTERVIEW_BUCKET = os.getenv("S3_INTERVIEW_BUCKET", "ai-interview-assistant-recordings")
 
 polly = boto3.client(
@@ -88,7 +88,7 @@ app = FastAPI(title="AI Interview Agent Platform")
 
 def ensure_s3_bucket():
     """Create S3 bucket if it doesn't exist."""
-    for bucket_name in [S3_BUCKET, S3_INTERVIEW_BUCKET]:
+    for bucket_name in [S3_INTERVIEW_BUCKET]:
         try:
             s3_client.head_bucket(Bucket=bucket_name)
             print(f"S3 bucket '{bucket_name}' exists.")
@@ -1173,11 +1173,16 @@ def send_interview_email(to_email, candidate_name, interview_url):
     msg.attach(MIMEText(html_body, "html"))
 
     if SMTP_HOST:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
+        print(f"[EMAIL] Sending to {to_email} via {SMTP_HOST}:{SMTP_PORT}")
+        context = ssl.create_default_context()
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
             if SMTP_USER:
                 server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+        print(f"[EMAIL] Successfully sent to {to_email}")
     else:
         print(f"[EMAIL] No SMTP configured. Interview email for {candidate_name} <{to_email}>:")
         print(f"  Interview Link: {interview_url}")
@@ -1206,6 +1211,7 @@ def send_email(payload: EmailRequest):
     except Exception as e:
         email_status = "email_failed"
         email_error = str(e)
+        print(f"[EMAIL ERROR] Failed to send to {payload.email}: {e}")
 
     return {
         "status": email_status,
@@ -1413,6 +1419,77 @@ Return ONLY this JSON:
     return extract_json_object(llm(prompt))
 
 
+def generate_overall_feedback(candidate_name, resume_text, jd_text, transcript, avg_score):
+    """Generate overall interview feedback with next-round recommendation."""
+    transcript_summary = ""
+    for item in transcript:
+        if "analysis" in item:
+            a = item["analysis"]
+            transcript_summary += f"\nQ{item.get('question_number', '?')} ({item.get('skill_area', 'general')}, {item.get('difficulty', '?')}): Score {a.get('score', 'N/A')}/10"
+            transcript_summary += f"\n  Depth: {a.get('depth', 'N/A')} | Authentic: {a.get('appears_authentic', 'N/A')} | AI-generated: {a.get('ai_generated', False)}"
+            if a.get("strengths"):
+                transcript_summary += f"\n  Strengths: {', '.join(a['strengths'][:3])}"
+            if a.get("weaknesses"):
+                transcript_summary += f"\n  Weaknesses: {', '.join(a['weaknesses'][:3])}"
+
+    prompt = f"""You are a senior hiring manager reviewing an AI-conducted technical interview.
+
+Candidate: {candidate_name}
+Average Score: {avg_score}/10
+Resume Summary: {resume_text[:1500]}
+Job Description: {jd_text[:1500]}
+
+Interview Performance Summary:
+{transcript_summary}
+
+Based on the interview performance, provide a comprehensive evaluation. Be fair, balanced, and specific.
+
+Return ONLY this JSON:
+{{
+  "overall_summary": "A 3-5 sentence summary of the candidate's overall interview performance, covering technical ability, communication, and depth of knowledge.",
+  "strengths": ["List of 3-5 key strengths demonstrated during the interview"],
+  "areas_for_improvement": ["List of 2-4 specific areas where the candidate could improve"],
+  "recommendation": "advance_to_next_round OR reject OR hold_for_review",
+  "recommendation_reason": "2-3 sentence justification for the recommendation, referencing specific interview answers and scores.",
+  "confidence_level": "high OR medium OR low",
+  "skill_ratings": {{
+    "technical_knowledge": 0,
+    "problem_solving": 0,
+    "communication": 0,
+    "depth_of_experience": 0,
+    "cultural_fit_signals": 0
+  }}
+}}
+
+RECOMMENDATION GUIDELINES:
+- "advance_to_next_round": Average score >= 6.5 AND no major red flags AND demonstrated genuine depth in at least 2 skill areas
+- "reject": Average score < 4 OR multiple AI-generated/inauthentic answers OR consistently shallow answers
+- "hold_for_review": Everything in between — needs human reviewer to make final call"""
+
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 1500,
+        "temperature": 0.2,
+        "messages": [{"role": "user", "content": prompt}]
+    })
+
+    for model_id in [ANALYSIS_MODEL_ID, MODEL_ID]:
+        try:
+            response = bedrock.invoke_model(
+                modelId=model_id,
+                body=body,
+                contentType="application/json",
+                accept="application/json"
+            )
+            result = json.loads(response["body"].read())
+            return extract_json_object(result["content"][0]["text"])
+        except Exception as e:
+            print(f"[Feedback] Model {model_id} failed: {e}")
+            if model_id == MODEL_ID:
+                raise
+            continue
+
+
 # =========================
 # AI Interview WebSocket
 # =========================
@@ -1457,7 +1534,9 @@ async def ai_interview_ws(ws: WebSocket, token: str):
     # Initialize proctoring data in candidate DB
     candidate_data = get_candidate_by_id(record["candidate_id"])
     if candidate_data:
-        proctoring = candidate_data.get("proctoring", {"flags": [], "video_s3_key": ""})
+        proctoring = candidate_data.get("proctoring", {})
+        proctoring["flags"] = proctoring.get("flags", [])
+        proctoring["video_s3_key"] = proctoring.get("video_s3_key", "")
         proctoring["interview_started_at"] = datetime.utcnow().isoformat()
         candidate_data["proctoring"] = proctoring
         save_candidate(candidate_data)
@@ -1568,42 +1647,6 @@ async def ai_interview_ws(ws: WebSocket, token: str):
             if score > 5:
                 analysis["weaknesses"] = []
 
-            # Build red flags for this question
-            red_flag_entry = None
-            flags = []
-
-            if analysis.get("ai_generated"):
-                flags.append({
-                    "flag": "ai_generated_answer",
-                    "reason": analysis.get("ai_generated_reason", "Answer appears AI-generated")
-                })
-
-            if score <= 3:
-                flags.append({
-                    "flag": "very_low_score",
-                    "reason": f"Score {score}/10 on {current_skill}"
-                })
-
-            if not analysis.get("appears_authentic"):
-                flags.append({
-                    "flag": "authenticity_concern",
-                    "reason": analysis.get("feedback", "Answer does not appear authentic")
-                })
-
-            if analysis.get("depth") in ("none", "very shallow"):
-                flags.append({
-                    "flag": "no_depth",
-                    "reason": f"Answer depth: {analysis.get('depth', 'unknown')} on {current_skill}"
-                })
-
-            if flags:
-                red_flag_entry = {
-                    "question_number": question_number,
-                    "skill_area": current_skill,
-                    "flags": flags,
-                    "timestamp": datetime.utcnow().isoformat()
-                }
-
             # Save to transcript
             entry = {
                 "question_number": question_number,
@@ -1617,13 +1660,9 @@ async def ai_interview_ws(ws: WebSocket, token: str):
             }
             ai_transcript.append(entry)
 
-            # Save progress + red flags to DB
+            # Save progress to DB
             candidate_data = get_candidate_by_id(record["candidate_id"])
             candidate_data["ai_interview_transcript"] = ai_transcript
-            if red_flag_entry:
-                red_flags = candidate_data.get("red_flags", [])
-                red_flags.append(red_flag_entry)
-                candidate_data["red_flags"] = red_flags
             save_candidate(candidate_data)
 
             # Prepare next question
@@ -1638,6 +1677,23 @@ async def ai_interview_ws(ws: WebSocket, token: str):
         # Interview complete
         scores = [e["analysis"].get("score", 0) for e in ai_transcript if "analysis" in e]
         avg_score = round(sum(scores) / len(scores), 2) if scores else 0
+
+        # Generate overall feedback and next-round recommendation
+        try:
+            overall_feedback = await asyncio.to_thread(
+                generate_overall_feedback,
+                candidate_name, resume_text, jd_text, ai_transcript, avg_score
+            )
+        except Exception as e:
+            print(f"[Feedback] Generation failed: {e}")
+            overall_feedback = {
+                "overall_summary": "Feedback generation unavailable.",
+                "strengths": [],
+                "areas_for_improvement": [],
+                "recommendation": "manual_review",
+                "recommendation_reason": "Automated feedback could not be generated.",
+                "confidence_level": "low"
+            }
 
         completion_text = f"Thank you {candidate_name} for completing the interview. We appreciate your time and will get back to you soon."
         try:
@@ -1657,6 +1713,7 @@ async def ai_interview_ws(ws: WebSocket, token: str):
         candidate_data = get_candidate_by_id(record["candidate_id"])
         candidate_data["interview_status"] = "completed"
         candidate_data["interview_average_score"] = avg_score
+        candidate_data["overall_feedback"] = overall_feedback
         save_candidate(candidate_data)
 
         await ws.close()
@@ -1666,66 +1723,6 @@ async def ai_interview_ws(ws: WebSocket, token: str):
         candidate_data["ai_interview_transcript"] = ai_transcript
         candidate_data["interview_status"] = "disconnected"
         save_candidate(candidate_data)
-
-
-# =========================
-# Photo Capture to S3
-# =========================
-
-class PhotoUpload(BaseModel):
-    token: str
-    photo: str
-    flag: str = ""
-
-@app.post("/upload_photo")
-def upload_photo(payload: PhotoUpload):
-    record, error = validate_token(payload.token)
-    if error:
-        return {"error": error}
-
-    # Strip data URI prefix if present
-    photo_data = payload.photo
-    if "," in photo_data:
-        photo_data = photo_data.split(",", 1)[1]
-
-    photo_bytes = base64.b64decode(photo_data)
-
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
-    flag_suffix = f"_{payload.flag}" if payload.flag else ""
-    key = f"interviews/{record['candidate_id']}/{record['token']}/{timestamp}{flag_suffix}.jpg"
-
-    try:
-        s3_client.put_object(
-            Bucket=S3_BUCKET,
-            Key=key,
-            Body=photo_bytes,
-            ContentType="image/jpeg"
-        )
-
-        # Generate a presigned URL valid for 7 days
-        photo_url = s3_client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": S3_BUCKET, "Key": key},
-            ExpiresIn=7 * 24 * 3600
-        )
-
-        # Save photo link in candidate DB
-        candidate_data = get_candidate_by_id(record["candidate_id"])
-        if candidate_data:
-            photos = candidate_data.get("interview_photos", [])
-            photos.append({
-                "s3_key": key,
-                "url": photo_url,
-                "flag": payload.flag,
-                "timestamp": timestamp,
-                "token": record["token"]
-            })
-            candidate_data["interview_photos"] = photos
-            save_candidate(candidate_data)
-
-        return {"status": "uploaded", "key": key, "url": photo_url}
-    except Exception as e:
-        return {"status": "upload_failed", "error": str(e)}
 
 
 # =========================
@@ -1786,18 +1783,29 @@ async def upload_snapshot(
             ExpiresIn=7 * 24 * 3600
         )
 
-        # Save flag to candidate DB
+        # Save flag to candidate DB (deduplicated — one entry per flag type with count)
         candidate_data = get_candidate_by_id(candidate_id)
         if candidate_data:
             proctoring = candidate_data.get("proctoring", {"flags": [], "video_s3_key": ""})
-            proctoring["flags"].append({
-                "timestamp": timestamp,
-                "type": flag_type,
-                "description": description,
-                "snapshot_s3_key": s3_key,
-                "snapshot_url": snapshot_url,
-                "created_at": datetime.utcnow().isoformat()
-            })
+
+            # Deduplicate flags: update existing entry or add new one
+            existing_flag = next((f for f in proctoring["flags"] if f["type"] == flag_type), None)
+            if existing_flag:
+                existing_flag["count"] = existing_flag.get("count", 1) + 1
+                existing_flag["last_timestamp"] = timestamp
+                existing_flag["last_description"] = description
+                existing_flag["last_seen"] = datetime.utcnow().isoformat()
+            else:
+                proctoring["flags"].append({
+                    "timestamp": timestamp,
+                    "type": flag_type,
+                    "description": description,
+                    "count": 1,
+                    "snapshot_s3_key": s3_key,
+                    "snapshot_url": snapshot_url,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+
             candidate_data["proctoring"] = proctoring
             save_candidate(candidate_data)
 
