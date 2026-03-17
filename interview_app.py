@@ -2,6 +2,7 @@ import os
 import json
 import re
 import random
+import asyncio
 import numpy as np
 import faiss
 import pdfplumber
@@ -38,6 +39,8 @@ AWS_SESSION_TOKEN = os.getenv("AWS_SESSION_TOKEN")
 AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 
 MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+# Stronger reasoning model for answer analysis & AI-detection
+ANALYSIS_MODEL_ID = os.getenv("ANALYSIS_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
 
 
 
@@ -64,6 +67,7 @@ s3_client = boto3.client(
     aws_session_token=AWS_SESSION_TOKEN
 )
 S3_BUCKET = os.getenv("S3_BUCKET", "interview-photos")
+S3_INTERVIEW_BUCKET = os.getenv("S3_INTERVIEW_BUCKET", "ai-interview-assistant-recordings")
 
 polly = boto3.client(
     "polly",
@@ -76,6 +80,36 @@ polly = boto3.client(
 INTERVIEW_TOTAL_QUESTIONS = int(os.getenv("INTERVIEW_TOTAL_QUESTIONS", "30"))
 
 app = FastAPI(title="AI Interview Agent Platform")
+
+
+# =========================
+# S3 Bucket Setup
+# =========================
+
+def ensure_s3_bucket():
+    """Create S3 bucket if it doesn't exist."""
+    for bucket_name in [S3_BUCKET, S3_INTERVIEW_BUCKET]:
+        try:
+            s3_client.head_bucket(Bucket=bucket_name)
+            print(f"S3 bucket '{bucket_name}' exists.")
+        except Exception:
+            try:
+                if AWS_REGION == "us-east-1":
+                    s3_client.create_bucket(Bucket=bucket_name)
+                else:
+                    s3_client.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+                    )
+                print(f"Created S3 bucket: {bucket_name}")
+            except Exception as e:
+                print(f"Warning: Could not create/access S3 bucket '{bucket_name}': {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    ensure_s3_bucket()
+
 
 # =========================
 # UI support
@@ -91,12 +125,58 @@ def interview_page():
     return FileResponse("ui/interview.html")
 
 # =========================
-# Database
+# Database (thread-safe wrapper)
 # =========================
 
-db = TinyDB("db.json")
-candidates_table = db.table("candidates")
-interview_tokens_table = db.table("interview_tokens")
+import threading
+
+_db_lock = threading.Lock()
+_db = TinyDB("db.json")
+_candidates_table = _db.table("candidates")
+_interview_tokens_table = _db.table("interview_tokens")
+
+
+class ThreadSafeTable:
+    """Wrapper around TinyDB table that serializes all access with a lock."""
+    def __init__(self, table, lock):
+        self._table = table
+        self._lock = lock
+
+    def get(self, *args, **kwargs):
+        with self._lock:
+            return self._table.get(*args, **kwargs)
+
+    def search(self, *args, **kwargs):
+        with self._lock:
+            return self._table.search(*args, **kwargs)
+
+    def insert(self, *args, **kwargs):
+        with self._lock:
+            return self._table.insert(*args, **kwargs)
+
+    def upsert(self, *args, **kwargs):
+        with self._lock:
+            return self._table.upsert(*args, **kwargs)
+
+    def update(self, *args, **kwargs):
+        with self._lock:
+            return self._table.update(*args, **kwargs)
+
+    def remove(self, *args, **kwargs):
+        with self._lock:
+            return self._table.remove(*args, **kwargs)
+
+    def all(self):
+        with self._lock:
+            return self._table.all()
+
+    def __len__(self):
+        with self._lock:
+            return len(self._table)
+
+
+candidates_table = ThreadSafeTable(_candidates_table, _db_lock)
+interview_tokens_table = ThreadSafeTable(_interview_tokens_table, _db_lock)
 
 
 # =========================
@@ -1213,6 +1293,22 @@ TASK 1 - Analyze the answer (internal analysis, NOT shared with candidate):
 - Does the depth match their resume experience?
 - Any signs of fabrication (vague generalities, buzzword stuffing, contradictions)?
 
+AI-GENERATED / COPY-PASTE DETECTION (CRITICAL - analyze carefully):
+You MUST carefully evaluate whether this answer was likely typed genuinely by the candidate OR copy-pasted from ChatGPT, Google, or similar AI tools. Set ai_generated=true if you detect ANY of these patterns:
+
+1. **Excessive Structure**: Uses numbered lists, bullet points, headers, or markdown-like formatting that no one would type in a live interview text box. Real candidates speak/type in natural paragraphs.
+2. **Textbook Completeness**: Covers every conceivable aspect of the topic with suspiciously comprehensive breadth. Real candidates focus on what they know, not encyclopedic coverage.
+3. **Generic Examples**: Uses generic hypothetical examples ("In one of the systems I worked on...") instead of naming specific projects, technologies, or team details from THEIR resume.
+4. **Formal Academic Tone**: Reads like a tutorial, blog post, or documentation rather than conversational speech. Look for phrases like "Key characteristics include", "It is important to note", "Aspects include".
+5. **Comparison Tables**: Any tabular or structured comparison format ("Aspect | X | Y") is almost certainly copy-pasted.
+6. **Disproportionate Length**: Answer is dramatically longer than what someone could reasonably type in 30-60 seconds of a live interview.
+7. **Consistency Check**: Compare against previous answers. If quality/style suddenly jumps, it's likely copy-pasted.
+8. **Perfect Grammar**: Flawless grammar, punctuation, and sentence structure throughout a long answer is unnatural for live typing.
+9. **Section Headers**: Any answer that uses section headers or numbered categories is copy-pasted.
+
+Be AGGRESSIVE in flagging. In a real interview, candidates give concise 3-8 sentence answers, not multi-paragraph structured essays. When in doubt, flag it.
+Provide specific reasoning in ai_generated_reason citing which patterns you detected.
+
 TASK 2 - Determine the response type:
 - If the candidate asks you to REPEAT the question (e.g. "could you please repeat", "say that again", "I didn't catch that", "can you repeat"), set response_type to "repeat" and put the SAME question back in next_question.question (rephrased slightly for clarity).
 - If the candidate says they CANNOT HEAR you (e.g. "I can't hear you", "no audio", "your voice is not working"), set response_type to "clarification" and respond helpfully — mention there is a text input area where they can read and type responses.
@@ -1246,6 +1342,8 @@ Return ONLY this JSON:
     "score": 0,
     "is_correct": true,
     "appears_authentic": true,
+    "ai_generated": false,
+    "ai_generated_reason": "",
     "depth": "shallow",
     "strengths": [],
     "weaknesses": [],
@@ -1268,14 +1366,23 @@ Return ONLY this JSON:
         "temperature": 0.3,
         "messages": [{"role": "user", "content": prompt}]
     })
-    response = bedrock.invoke_model(
-        modelId=MODEL_ID,
-        body=body,
-        contentType="application/json",
-        accept="application/json"
-    )
-    result = json.loads(response["body"].read())
-    return extract_json_object(result["content"][0]["text"])
+
+    # Try analysis model first, fall back to general model if unavailable
+    for model_id in [ANALYSIS_MODEL_ID, MODEL_ID]:
+        try:
+            response = bedrock.invoke_model(
+                modelId=model_id,
+                body=body,
+                contentType="application/json",
+                accept="application/json"
+            )
+            result = json.loads(response["body"].read())
+            return extract_json_object(result["content"][0]["text"])
+        except Exception as e:
+            print(f"[Analysis] Model {model_id} failed: {e}")
+            if model_id == MODEL_ID:
+                raise  # Both models failed, propagate
+            continue  # Try fallback
 
 
 def generate_first_question(candidate_name, resume_text, jd_text):
@@ -1303,6 +1410,9 @@ Return ONLY this JSON:
 @app.websocket("/ws/ai_interview/{token}")
 async def ai_interview_ws(ws: WebSocket, token: str):
     await ws.accept()
+
+    # Send immediate ack so client leaves "Connecting..." state instantly
+    await ws.send_json({"type": "connected", "message": "Preparing your interview..."})
 
     Token = Query()
     record = interview_tokens_table.get(Token.token == token)
@@ -1334,11 +1444,23 @@ async def ai_interview_ws(ws: WebSocket, token: str):
     # Get configurable question count (from token record or env default)
     total_questions = record.get("total_questions", INTERVIEW_TOTAL_QUESTIONS)
 
+    # Initialize proctoring data in candidate DB
+    candidate_data = get_candidate_by_id(record["candidate_id"])
+    if candidate_data:
+        proctoring = candidate_data.get("proctoring", {"flags": [], "video_s3_key": ""})
+        proctoring["interview_started_at"] = datetime.utcnow().isoformat()
+        candidate_data["proctoring"] = proctoring
+        save_candidate(candidate_data)
+
     try:
-        # Step 1: Greeting
-        greeting_text = generate_greeting(candidate_name, resume_text, jd_text, total_questions)
+        # Step 1: Generate greeting + first question in parallel (both are independent LLM calls)
+        greeting_text, first_q = await asyncio.gather(
+            asyncio.to_thread(generate_greeting, candidate_name, resume_text, jd_text, total_questions),
+            asyncio.to_thread(generate_first_question, candidate_name, resume_text, jd_text)
+        )
+
         try:
-            greeting_audio = synthesize_speech(greeting_text)
+            greeting_audio = await asyncio.to_thread(synthesize_speech, greeting_text)
         except Exception:
             greeting_audio = ""
 
@@ -1368,8 +1490,7 @@ async def ai_interview_ws(ws: WebSocket, token: str):
         candidate_data["ai_interview_transcript"] = ai_transcript
         save_candidate(candidate_data)
 
-        # Step 2: First question
-        first_q = generate_first_question(candidate_name, resume_text, jd_text)
+        # First question already generated in parallel above
         current_question = first_q.get("question", "Tell me about your experience.")
         current_skill = first_q.get("skill_area", "general")
         current_difficulty = first_q.get("difficulty", "beginner")
@@ -1379,7 +1500,7 @@ async def ai_interview_ws(ws: WebSocket, token: str):
         while question_number <= total_questions:
             # Send question
             try:
-                question_audio = synthesize_speech(current_question)
+                question_audio = await asyncio.to_thread(synthesize_speech, current_question)
             except Exception:
                 question_audio = ""
 
@@ -1397,16 +1518,81 @@ async def ai_interview_ws(ws: WebSocket, token: str):
             answer_data = await ws.receive_json()
             answer_text = answer_data.get("text", "")
 
-            # Analyze answer + generate next question
-            result = process_answer_and_generate_next(
-                candidate_name, resume_text, jd_text,
-                ai_transcript, current_question, answer_text,
-                current_skill, question_number, total_questions
-            )
+            # Truncate excessively long answers to prevent LLM timeouts
+            if len(answer_text) > 3000:
+                answer_text = answer_text[:3000] + "... [truncated]"
+
+            # Analyze answer + generate next question (run in thread to not block event loop)
+            try:
+                result = await asyncio.to_thread(
+                    process_answer_and_generate_next,
+                    candidate_name, resume_text, jd_text,
+                    ai_transcript, current_question, answer_text,
+                    current_skill, question_number, total_questions
+                )
+            except Exception as e:
+                print(f"[WebSocket] Analysis failed for Q{question_number}: {e}")
+                # Provide a safe fallback so the interview continues
+                result = {
+                    "analysis": {
+                        "score": 5, "is_correct": True, "appears_authentic": True,
+                        "ai_generated": False, "ai_generated_reason": "",
+                        "depth": "moderate", "strengths": [], "weaknesses": [],
+                        "feedback": "Analysis unavailable", "follow_up_needed": False, "follow_up_reason": ""
+                    },
+                    "response_type": "normal",
+                    "next_question": {
+                        "question": f"Tell me more about your experience with {current_skill}.",
+                        "skill_area": current_skill,
+                        "difficulty": "intermediate",
+                        "is_follow_up": False
+                    }
+                }
 
             analysis = result.get("analysis", {})
             next_q = result.get("next_question", {})
             response_type = result.get("response_type", "normal")
+
+            # If score > 5, strip weaknesses (good answer, no need to track weaknesses)
+            score = analysis.get("score", 0)
+            if score > 5:
+                analysis["weaknesses"] = []
+
+            # Build red flags for this question
+            red_flag_entry = None
+            flags = []
+
+            if analysis.get("ai_generated"):
+                flags.append({
+                    "flag": "ai_generated_answer",
+                    "reason": analysis.get("ai_generated_reason", "Answer appears AI-generated")
+                })
+
+            if score <= 3:
+                flags.append({
+                    "flag": "very_low_score",
+                    "reason": f"Score {score}/10 on {current_skill}"
+                })
+
+            if not analysis.get("appears_authentic"):
+                flags.append({
+                    "flag": "authenticity_concern",
+                    "reason": analysis.get("feedback", "Answer does not appear authentic")
+                })
+
+            if analysis.get("depth") in ("none", "very shallow"):
+                flags.append({
+                    "flag": "no_depth",
+                    "reason": f"Answer depth: {analysis.get('depth', 'unknown')} on {current_skill}"
+                })
+
+            if flags:
+                red_flag_entry = {
+                    "question_number": question_number,
+                    "skill_area": current_skill,
+                    "flags": flags,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
 
             # Save to transcript
             entry = {
@@ -1421,9 +1607,13 @@ async def ai_interview_ws(ws: WebSocket, token: str):
             }
             ai_transcript.append(entry)
 
-            # Save progress to DB
+            # Save progress + red flags to DB
             candidate_data = get_candidate_by_id(record["candidate_id"])
             candidate_data["ai_interview_transcript"] = ai_transcript
+            if red_flag_entry:
+                red_flags = candidate_data.get("red_flags", [])
+                red_flags.append(red_flag_entry)
+                candidate_data["red_flags"] = red_flags
             save_candidate(candidate_data)
 
             # Prepare next question
@@ -1441,7 +1631,7 @@ async def ai_interview_ws(ws: WebSocket, token: str):
 
         completion_text = f"Thank you {candidate_name} for completing the interview. We appreciate your time and will get back to you soon."
         try:
-            completion_audio = synthesize_speech(completion_text)
+            completion_audio = await asyncio.to_thread(synthesize_speech, completion_text)
         except Exception:
             completion_audio = ""
 
@@ -1526,6 +1716,137 @@ def upload_photo(payload: PhotoUpload):
         return {"status": "uploaded", "key": key, "url": photo_url}
     except Exception as e:
         return {"status": "upload_failed", "error": str(e)}
+
+
+# =========================
+# Proctoring - S3 Upload Endpoints
+# =========================
+
+@app.post("/api/upload_video_chunk")
+async def upload_video_chunk(
+    token: str = Form(...),
+    chunk_index: int = Form(0),
+    file: UploadFile = File(...)
+):
+    Token = Query()
+    record = interview_tokens_table.get(Token.token == token)
+    if not record:
+        return {"error": "Invalid token"}
+
+    candidate_id = record["candidate_id"]
+    s3_key = f"videos/{candidate_id}/{token}/recording_backup.webm"
+
+    try:
+        s3_client.upload_fileobj(
+            file.file, S3_INTERVIEW_BUCKET, s3_key,
+            ExtraArgs={"ContentType": "video/webm"}
+        )
+        return {"status": "ok", "s3_key": s3_key}
+    except Exception as e:
+        return {"error": f"S3 upload failed: {e}"}
+
+
+@app.post("/api/upload_snapshot")
+async def upload_snapshot(
+    token: str = Form(...),
+    timestamp: float = Form(...),
+    flag_type: str = Form(...),
+    description: str = Form(""),
+    file: UploadFile = File(...)
+):
+    Token = Query()
+    record = interview_tokens_table.get(Token.token == token)
+    if not record:
+        return {"error": "Invalid token"}
+
+    candidate_id = record["candidate_id"]
+    safe_ts = f"{timestamp:.1f}".replace(".", "_")
+    s3_key = f"snapshots/{candidate_id}/{token}/{safe_ts}s_{flag_type}.jpg"
+
+    try:
+        s3_client.upload_fileobj(
+            file.file, S3_INTERVIEW_BUCKET, s3_key,
+            ExtraArgs={"ContentType": "image/jpeg"}
+        )
+
+        # Generate presigned URL for snapshot
+        snapshot_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": S3_INTERVIEW_BUCKET, "Key": s3_key},
+            ExpiresIn=7 * 24 * 3600
+        )
+
+        # Save flag to candidate DB
+        candidate_data = get_candidate_by_id(candidate_id)
+        if candidate_data:
+            proctoring = candidate_data.get("proctoring", {"flags": [], "video_s3_key": ""})
+            proctoring["flags"].append({
+                "timestamp": timestamp,
+                "type": flag_type,
+                "description": description,
+                "snapshot_s3_key": s3_key,
+                "snapshot_url": snapshot_url,
+                "created_at": datetime.utcnow().isoformat()
+            })
+            candidate_data["proctoring"] = proctoring
+            save_candidate(candidate_data)
+
+        return {"status": "ok", "s3_key": s3_key, "url": snapshot_url}
+    except Exception as e:
+        return {"error": f"S3 upload failed: {e}"}
+
+
+@app.post("/api/upload_final_video")
+async def upload_final_video(
+    token: str = Form(...),
+    file: UploadFile = File(...)
+):
+    Token = Query()
+    record = interview_tokens_table.get(Token.token == token)
+    if not record:
+        return {"error": "Invalid token"}
+
+    candidate_id = record["candidate_id"]
+    s3_key = f"videos/{candidate_id}/{token}/interview.webm"
+
+    try:
+        s3_client.upload_fileobj(
+            file.file, S3_INTERVIEW_BUCKET, s3_key,
+            ExtraArgs={"ContentType": "video/webm"}
+        )
+
+        # Generate presigned URL for video
+        video_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": S3_INTERVIEW_BUCKET, "Key": s3_key},
+            ExpiresIn=7 * 24 * 3600
+        )
+
+        # Save video URL to candidate DB
+        candidate_data = get_candidate_by_id(candidate_id)
+        if candidate_data:
+            proctoring = candidate_data.get("proctoring", {"flags": []})
+            proctoring["video_s3_key"] = s3_key
+            proctoring["video_url"] = video_url
+            candidate_data["proctoring"] = proctoring
+            save_candidate(candidate_data)
+
+        return {"status": "ok", "s3_key": s3_key, "url": video_url}
+    except Exception as e:
+        return {"error": f"S3 upload failed: {e}"}
+
+
+@app.get("/api/presigned_url")
+async def get_presigned_url(s3_key: str = QueryParam(...)):
+    try:
+        url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": S3_INTERVIEW_BUCKET, "Key": s3_key},
+            ExpiresIn=3600
+        )
+        return {"url": url}
+    except Exception as e:
+        return {"error": f"Failed to generate URL: {e}"}
 
 
 
