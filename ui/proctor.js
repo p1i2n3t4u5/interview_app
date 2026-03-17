@@ -31,6 +31,7 @@ class ProctorMonitor {
 
         // Flag tracking
         this.flags = [];
+        this.flagCounts = {};   // Track how many times each flag type has been raised
         this.lastFlagTime = {};
         this.FLAG_COOLDOWN_MS = 15000; // 15s cooldown between same flag type
 
@@ -392,20 +393,39 @@ class ProctorMonitor {
 
         this.lastFlagTime[type] = now;
 
+        // Increment count for this flag type
+        this.flagCounts[type] = (this.flagCounts[type] || 0) + 1;
+
         const timestampSeconds = (now - this.recordingStartTime) / 1000;
 
-        const flag = {
-            timestamp: Math.round(timestampSeconds * 10) / 10,
-            type: type,
-            description: description,
-            created_at: new Date().toISOString()
-        };
+        // Check if this flag type already exists in the array
+        const existing = this.flags.find(f => f.type === type);
 
-        this.flags.push(flag);
-        console.log(`[Proctor] FLAG: ${type} at ${flag.timestamp}s - ${description}`);
+        if (existing) {
+            // Update existing: increment count and update timestamp
+            existing.count = this.flagCounts[type];
+            existing.last_timestamp = Math.round(timestampSeconds * 10) / 10;
+            existing.last_description = description;
+            existing.last_seen = new Date().toISOString();
+            console.log(`[Proctor] FLAG UPDATE: ${type} (count: ${existing.count}) at ${existing.last_timestamp}s`);
+        } else {
+            // Add new flag entry
+            const flag = {
+                timestamp: Math.round(timestampSeconds * 10) / 10,
+                type: type,
+                description: description,
+                count: 1,
+                created_at: new Date().toISOString()
+            };
+            this.flags.push(flag);
+            console.log(`[Proctor] FLAG: ${type} at ${flag.timestamp}s - ${description}`);
+        }
 
-        // Capture and upload snapshot asynchronously
-        this.captureAndUploadSnapshot(flag);
+        // Capture and upload snapshot only on first occurrence
+        if (this.flagCounts[type] === 1) {
+            const flag = this.flags.find(f => f.type === type);
+            this.captureAndUploadSnapshot(flag);
+        }
     }
 
     // ===========================

@@ -6,7 +6,6 @@ let isListening = false;
 let currentAnswer = "";
 let currentAudio = null;
 let totalQuestions = 0;
-let photoCaptureInterval = null;
 let interviewToken = null;
 let proctorMonitor = null;
 
@@ -110,9 +109,6 @@ function startInterview() {
     interviewVideo.srcObject = mediaStream;
 
     setStatus("connecting", "Connecting...");
-
-    // Start random photo capture
-    startPhotoCapture();
 
     // Start proctoring (video recording, face/eye tracking, object detection)
     const token = new URLSearchParams(window.location.search).get("token");
@@ -237,6 +233,7 @@ function beginListening() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+    recognition.maxAlternatives = 3;
 
     let finalTranscript = "";
     let hasSpoken = false;
@@ -248,7 +245,14 @@ function beginListening() {
 
         for (let i = 0; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript + " ";
+                // Pick the highest-confidence alternative
+                let best = event.results[i][0];
+                for (let j = 1; j < event.results[i].length; j++) {
+                    if (event.results[i][j].confidence > best.confidence) {
+                        best = event.results[i][j];
+                    }
+                }
+                finalTranscript += best.transcript + " ";
             } else {
                 interim += event.results[i][0].transcript;
             }
@@ -266,18 +270,26 @@ function beginListening() {
                 currentAnswer = finalTranscript.trim();
                 submitCurrentAnswer();
             }
-        }, 5000);
+        }, 7000);
     };
 
     recognition.onerror = (event) => {
-        if (event.error === "no-speech") {
-            try { recognition.start(); } catch (e) {}
+        if (event.error === "no-speech" || event.error === "audio-capture" || event.error === "network") {
+            // Restart recognition on recoverable errors
+            setTimeout(() => {
+                if (isListening) {
+                    try { recognition.start(); } catch (e) {}
+                }
+            }, 300);
         }
     };
 
     recognition.onend = () => {
-        if (isListening && !hasSpoken) {
-            try { recognition.start(); } catch (e) {}
+        // Always restart if we're still in listening mode
+        if (isListening) {
+            setTimeout(() => {
+                try { recognition.start(); } catch (e) {}
+            }, 200);
         }
     };
 
@@ -380,7 +392,6 @@ function addToTranscript(role, text) {
 
 async function showComplete(message) {
     stopListening();
-    stopPhotoCapture();
 
     // Stop proctoring and upload final video
     if (proctorMonitor) {
@@ -406,65 +417,21 @@ function showInterviewError(message) {
 }
 
 // ===========================
-// Photo Capture to S3
-// ===========================
-
-function startPhotoCapture() {
-    captureAndUploadPhoto("");
-    // Capture at random intervals between 15-45 seconds
-    scheduleNextCapture();
-}
-
-function scheduleNextCapture() {
-    const delay = (15 + Math.random() * 30) * 1000;
-    photoCaptureInterval = setTimeout(() => {
-        captureAndUploadPhoto("");
-        scheduleNextCapture();
-    }, delay);
-}
-
-function stopPhotoCapture() {
-    if (photoCaptureInterval) {
-        clearTimeout(photoCaptureInterval);
-        photoCaptureInterval = null;
-    }
-}
-
-function captureAndUploadPhoto(flag) {
-    const video = document.getElementById("interviewVideo");
-    if (!video || !video.srcObject) return;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const photoData = canvas.toDataURL("image/jpeg", 0.7);
-
-    fetch("/upload_photo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            token: interviewToken,
-            photo: photoData,
-            flag: flag
-        })
-    }).catch(err => console.warn("Photo upload failed:", err));
-}
-
-// ===========================
 // Tab Visibility Detection
 // ===========================
 
 document.addEventListener("visibilitychange", () => {
     if (document.hidden && document.getElementById("interviewState").style.display !== "none") {
-        captureAndUploadPhoto("tab_switch");
+        if (proctorMonitor) {
+            proctorMonitor.raiseFlag("tab_switch", "Candidate switched to another tab");
+        }
     }
 });
 
 window.addEventListener("blur", () => {
     if (document.getElementById("interviewState").style.display !== "none") {
-        captureAndUploadPhoto("window_blur");
+        if (proctorMonitor) {
+            proctorMonitor.raiseFlag("window_blur", "Browser window lost focus — candidate may have opened another application");
+        }
     }
 });
