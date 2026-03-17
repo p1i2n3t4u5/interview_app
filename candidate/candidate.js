@@ -91,17 +91,27 @@ function renderProgress(c) {
 }
 
 /* ---------- Quick Stats ---------- */
+function getInterviewSource(c) {
+    const ai = c.ai_interview_transcript || [];
+    const manual = c.transcript || [];
+    if (ai.length > 0) return { label: 'Live AI Interview', icon: '🤖', color: 'var(--primary)' };
+    if (manual.length > 0) return { label: 'Uploaded Transcript', icon: '📤', color: 'var(--warning, #d97706)' };
+    return { label: 'Not Interviewed', icon: '—', color: 'var(--text-muted)' };
+}
+
 function renderQuickStats(c) {
     const skills = c.candidate_skills || [];
     const jdSkills = c.jd_skills || [];
     const transcript = c.ai_interview_transcript || c.transcript || [];
     const matched = skills.filter(s => jdSkills.some(j => j.toLowerCase() === s.toLowerCase()));
+    const source = getInterviewSource(c);
 
     setHTML('#quickStats', `
         <div class="stat-card"><div class="stat-value">${skills.length}</div><div class="stat-label">Skills Found</div></div>
         <div class="stat-card"><div class="stat-value">${c.years_experience || '—'}</div><div class="stat-label">Years Experience</div></div>
         <div class="stat-card"><div class="stat-value">${matched.length}/${jdSkills.length || '—'}</div><div class="stat-label">JD Skills Matched</div></div>
         <div class="stat-card"><div class="stat-value">${transcript.length}</div><div class="stat-label">Interview Questions</div></div>
+        <div class="stat-card"><div class="stat-value" style="font-size:16px; color:${source.color}">${source.icon} ${source.label}</div><div class="stat-label">Interview Source</div></div>
     `);
 }
 
@@ -220,6 +230,9 @@ function renderInterviewAnalysis(c) {
         return;
     }
 
+    const source = getInterviewSource(c);
+    const sourceBadge = `<span style="display:inline-block; padding:3px 10px; border-radius:50px; font-size:12px; font-weight:600; background:${source.color}18; color:${source.color}; margin-left:10px">${source.icon} ${source.label}</span>`;
+
     // Compute skill scores from transcript
     const skillScores = {};
     const scores = [];
@@ -268,6 +281,10 @@ function renderInterviewAnalysis(c) {
             <div class="stat-card">
                 <div class="stat-value">${c.interview_status || '—'}</div>
                 <div class="stat-label">Status</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="font-size:14px; color:${source.color}">${source.icon} ${source.label}</div>
+                <div class="stat-label">Interview Source</div>
             </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px">
