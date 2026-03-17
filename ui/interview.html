@@ -137,7 +137,7 @@
                         <span id="answerStatus">Listening...</span>
                     </div>
                     <div class="answer-actions">
-                        <textarea id="textAnswer" class="text-input-unified" placeholder="Speak or type your answer here..." rows="3"></textarea>
+                        <textarea id="textAnswer" class="text-input-unified" placeholder="Speak or type your answer here..." rows="5"></textarea>
                         <button id="submitAnswerBtn" onclick="manualSubmit()" disabled>Submit Answer</button>
                     </div>
                 </div>
@@ -152,6 +152,12 @@
         <p id="completeMessage">Thank you for completing the interview.</p>
         <p class="help-text">Your responses have been recorded and will be reviewed by the hiring team.</p>
     </div>
+
+    <!-- Proctoring dependencies (deferred - not needed until interview starts) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script defer src="/ui/proctor.js"></script>
 
     <script src="/ui/interview.js"></script>
 </body>

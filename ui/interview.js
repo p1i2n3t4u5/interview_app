@@ -8,6 +8,7 @@ let currentAudio = null;
 let totalQuestions = 0;
 let photoCaptureInterval = null;
 let interviewToken = null;
+let proctorMonitor = null;
 
 // On page load, validate the token from URL
 document.addEventListener("DOMContentLoaded", async () => {
@@ -113,7 +114,11 @@ function startInterview() {
     // Start random photo capture
     startPhotoCapture();
 
+    // Start proctoring (video recording, face/eye tracking, object detection)
     const token = new URLSearchParams(window.location.search).get("token");
+    proctorMonitor = new ProctorMonitor(interviewVideo, mediaStream, token);
+    proctorMonitor.start();
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     ws = new WebSocket(`${protocol}//${window.location.host}/ws/ai_interview/${token}`);
 
@@ -125,6 +130,10 @@ function startInterview() {
         stopListening();
 
         switch (data.type) {
+            case "connected":
+                setStatus("preparing", "Preparing your interview...");
+                break;
+
             case "greeting":
                 updateProgress(0, data.total_questions);
                 setStatus("speaking", "AI is speaking...");
@@ -135,7 +144,6 @@ function startInterview() {
 
             case "question":
                 updateProgress(data.question_number, data.total_questions);
-                updateSkillBadge(data.skill_area, data.difficulty);
                 setStatus("speaking", "AI is speaking...");
                 addToTranscript("ai", data.text);
                 await playAudio(data.audio);
@@ -145,7 +153,7 @@ function startInterview() {
             case "complete":
                 setStatus("complete", "Interview complete");
                 if (data.audio) await playAudio(data.audio);
-                showComplete(data.text || data.message);
+                await showComplete(data.text || data.message);
                 break;
 
             case "error":
@@ -351,13 +359,6 @@ function updateProgress(current, total) {
     document.getElementById("progressText").textContent = `${current} / ${total}`;
 }
 
-function updateSkillBadge(skill, difficulty) {
-    const badge = document.getElementById("skillBadge");
-    const skillText = document.getElementById("currentSkill");
-    badge.style.display = "block";
-    skillText.textContent = `${skill} (${difficulty})`;
-}
-
 function addToTranscript(role, text) {
     const display = document.getElementById("transcriptDisplay");
     const entry = document.createElement("div");
@@ -377,9 +378,15 @@ function addToTranscript(role, text) {
     display.scrollTop = display.scrollHeight;
 }
 
-function showComplete(message) {
+async function showComplete(message) {
     stopListening();
     stopPhotoCapture();
+
+    // Stop proctoring and upload final video
+    if (proctorMonitor) {
+        try { await proctorMonitor.stop(); } catch (e) { console.warn("Proctor stop error:", e); }
+    }
+
     document.getElementById("interviewState").style.display = "none";
     document.getElementById("completeState").style.display = "flex";
     document.getElementById("completeMessage").textContent = message;
@@ -391,6 +398,9 @@ function showComplete(message) {
 
 function showInterviewError(message) {
     stopListening();
+    if (proctorMonitor) {
+        proctorMonitor.stop().catch(() => {});
+    }
     setStatus("error", message);
     addToTranscript("ai", "Error: " + message);
 }
@@ -450,7 +460,6 @@ function captureAndUploadPhoto(flag) {
 document.addEventListener("visibilitychange", () => {
     if (document.hidden && document.getElementById("interviewState").style.display !== "none") {
         captureAndUploadPhoto("tab_switch");
-        addToTranscript("ai", "Warning: Tab switch detected. Please stay on this page during the interview.");
     }
 });
 

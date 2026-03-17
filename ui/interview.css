@@ -460,14 +460,17 @@ button:disabled {
 
 .text-input-unified {
     width: 100%;
-    padding: 12px 14px;
+    min-height: 100px;
+    max-height: 250px;
+    padding: 14px 16px;
     border: 2px solid #ddd;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 15px;
-    resize: none;
+    resize: vertical;
     font-family: inherit;
-    line-height: 1.5;
+    line-height: 1.6;
     transition: border-color 0.2s;
+    background: #fafbfc;
 }
 
 .text-input-unified:focus {
