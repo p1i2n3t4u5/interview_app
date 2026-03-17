@@ -75,17 +75,25 @@ function renderProfile() {
     renderProctoring(c);
     renderWorkExperience(c);
     renderEducation(c);
+
+    // Disable invite button if interview is completed
+    const inviteBtn = document.getElementById('sendInviteBtn');
+    if (inviteBtn && c.interview_status === 'completed') {
+        inviteBtn.disabled = true;
+        inviteBtn.textContent = '✅ Interview Completed';
+        inviteBtn.style.opacity = '0.6';
+        inviteBtn.style.cursor = 'not-allowed';
+    }
 }
 
 /* ---------- Progress Stepper ---------- */
 function renderProgress(c) {
-    const stages = ['Resume Uploaded', 'Skills Extracted', 'JD Analyzed', 'Interview Scheduled', 'Interview Completed', 'Evaluated'];
+    const stages = ['Resume Uploaded', 'Skills Extracted', 'JD Analyzed', 'Interview Scheduled', 'Interview Completed'];
     let current = 0;
     if (c.candidate_skills?.length > 0) current = 1;
     if (c.jd_skills?.length > 0) current = 2;
     if (c.interview_status === 'pending' || c.interview_status === 'active') current = 3;
-    if (c.interview_status === 'completed') current = 4;
-    if (c.interview_average_score > 0) current = 5;
+    if (c.interview_status === 'completed') current = 5;
 
     setHTML('#progressStepper', renderProgressStepper(stages, current));
 }
@@ -152,11 +160,20 @@ function renderJDMatch(c) {
             </div>`;
         });
     } else if (hasLegacyJD) {
-        // Fallback to legacy single JD match
-        const cSkills = new Set((c.candidate_skills || []).map(s => s.toLowerCase()));
+        // Fallback to legacy single JD match — use fuzzy matching
+        const cSkills = (c.candidate_skills || []).map(s => s.toLowerCase());
         const jSkills = c.jd_skills || [];
-        const matched = jSkills.filter(s => cSkills.has(s.toLowerCase()));
-        const missing = jSkills.filter(s => !cSkills.has(s.toLowerCase()));
+
+        function fuzzyMatch(jdSkill) {
+            const js = jdSkill.toLowerCase();
+            return cSkills.some(cs =>
+                cs === js || cs.includes(js) || js.includes(cs) ||
+                cs.replace(/[\s.\-]?\d+(\.\d+)*$/, '').trim() === js.replace(/[\s.\-]?\d+(\.\d+)*$/, '').trim()
+            );
+        }
+
+        const matched = jSkills.filter(s => fuzzyMatch(s));
+        const missing = jSkills.filter(s => !fuzzyMatch(s));
         const matchPct = jSkills.length ? Math.round(matched.length / jSkills.length * 100) : 0;
 
         html += `
@@ -187,13 +204,20 @@ function renderJDMatch(c) {
 /* ---------- Skills Overview ---------- */
 function renderSkills(c) {
     const skills = c.candidate_skills || [];
-    const jdSkills = new Set((c.jd_skills || []).map(s => s.toLowerCase()));
+    const jdSkillsList = (c.jd_skills || []).map(s => s.toLowerCase());
+
+    function isJDMatch(skill) {
+        const s = skill.toLowerCase();
+        return jdSkillsList.some(js =>
+            s === js || s.includes(js) || js.includes(s) ||
+            s.replace(/[\s.\-]?\d+(\.\d+)*$/, '').trim() === js.replace(/[\s.\-]?\d+(\.\d+)*$/, '').trim()
+        );
+    }
 
     setHTML('#skillsOverview', `
         <div class="skill-tags">
             ${skills.map(s => {
-                const isMatch = jdSkills.has(s.toLowerCase());
-                return `<span class="skill-tag ${isMatch ? 'matched' : ''}">${s}</span>`;
+                return `<span class="skill-tag ${isJDMatch(s) ? 'matched' : ''}">${s}</span>`;
             }).join('')}
         </div>
         ${skills.length === 0 ? '<p class="text-muted">No skills extracted yet.</p>' : ''}
