@@ -1151,7 +1151,8 @@ def send_interview_email(to_email, candidate_name, interview_url):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Your Interview Invitation"
     msg["From"] = SENDER_EMAIL
-    msg["To"] = to_email
+    # msg["To"] = to_email
+    msg["To"] = "iamgulmd@gmail.com" #
 
     html_body = f"""
     <html>
