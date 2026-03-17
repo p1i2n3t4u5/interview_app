@@ -1,0 +1,191 @@
+<!-- ---- START: Ishita - New recruiter dashboard page with resume upload, JD gap analysis, search, compare, schedule interview, reports ---- -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recruiter Dashboard — AI Hiring Platform</title>
+    <link rel="stylesheet" href="/shared/shared.css">
+    <link rel="stylesheet" href="/recruiter/static/recruiter.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+    <div class="logo">🧠 AI Hiring Platform</div>
+    <div class="nav-links">
+        <a href="/recruiter" class="active">Recruiter</a>
+        <a href="/">Legacy Dashboard</a>
+    </div>
+</header>
+
+<div class="page-container">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <h3>Recruiter Tools</h3>
+    <button data-section="upload-resumes" class="active" onclick="showBlock('upload-resumes')">📄 Upload Resumes</button>
+    <button data-section="jd-analysis" onclick="showBlock('jd-analysis')">📋 JD Gap Analysis</button>
+    <button data-section="search-candidates" onclick="showBlock('search-candidates')">🔍 Search Candidates</button>
+    <h3>Views</h3>
+    <button data-section="all-candidates" onclick="showBlock('all-candidates')">👥 All Candidates</button>
+    <button data-section="comparison" onclick="showBlock('comparison')">📊 Compare Candidates</button>
+    <h3>Actions</h3>
+    <button data-section="schedule-interview" onclick="showBlock('schedule-interview')">🎙️ Schedule Interview</button>
+    <button data-section="reports" onclick="showBlock('reports')">📈 Reports & Analytics</button>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="content">
+
+    <!-- ============== UPLOAD RESUMES ============== -->
+    <div class="card block" id="upload-resumes">
+        <h2>📄 Upload Resumes</h2>
+        <p class="text-muted text-sm mb-4">Upload one or multiple resumes. A unique candidate key will be generated per resume for easy tracking.</p>
+
+        <label>Select Resume Files (PDF)</label>
+        <input type="file" id="resumeFiles" multiple accept=".pdf">
+
+        <div class="flex gap-2 mt-4">
+            <button class="btn btn-primary" onclick="recruiterUploadResumes()">Upload & Process</button>
+        </div>
+
+        <div id="uploadProgress" class="hidden mt-4">
+            <div class="spinner"></div>
+            <span class="text-muted text-sm" style="margin-left:10px">Processing resumes with AI...</span>
+        </div>
+
+        <!-- Upload Results -->
+        <div id="uploadResults" class="mt-6"></div>
+    </div>
+
+    <!-- ============== JD GAP ANALYSIS ============== -->
+    <div class="card block hidden" id="jd-analysis">
+        <h2>📋 JD Upload & Gap Analysis</h2>
+        <p class="text-muted text-sm mb-4">Upload a Job Description to analyze how well each candidate's resume matches the required skills.</p>
+
+        <label>Upload Job Description (PDF)</label>
+        <input type="file" id="jdFile" accept=".pdf">
+
+        <label>Select Candidates for Analysis</label>
+        <div class="search-box">
+            <input type="text" id="jdCandidateSearch" placeholder="Search candidates..." onkeyup="filterJDCandidates()">
+        </div>
+        <div id="jdCandidateCheckboxes" class="candidate-checkbox-list"></div>
+
+        <div class="flex gap-2 mt-4">
+            <button class="btn btn-primary" onclick="analyzeJDGap()">Analyze with AI</button>
+            <button class="btn btn-outline" onclick="selectAllJDCandidates()">Select All</button>
+        </div>
+
+        <div id="jdAnalysisLoading" class="hidden mt-4">
+            <div class="spinner"></div>
+            <span class="text-muted text-sm" style="margin-left:10px">Running gap analysis with Bedrock AI...</span>
+        </div>
+
+        <!-- Gap Analysis Results -->
+        <div id="gapAnalysisResults" class="mt-6"></div>
+    </div>
+
+    <!-- ============== SEARCH CANDIDATES ============== -->
+    <div class="card block hidden" id="search-candidates">
+        <h2>🔍 Search Candidates</h2>
+        <p class="text-muted text-sm mb-4">Search by name, skills, candidate key, or any keyword.</p>
+
+        <div class="search-box">
+            <input type="text" id="globalSearch" placeholder="Search by name, skills, ID..." onkeyup="globalSearchCandidates()">
+        </div>
+
+        <div id="searchResults"></div>
+    </div>
+
+    <!-- ============== ALL CANDIDATES ============== -->
+    <div class="card block hidden" id="all-candidates">
+        <div class="card-header">
+            <h2>👥 All Candidates</h2>
+            <button class="btn btn-outline btn-sm" onclick="refreshCandidates()">↻ Refresh</button>
+        </div>
+
+        <div class="stats-grid" id="candidateStats"></div>
+
+        <div id="candidateList"></div>
+    </div>
+
+    <!-- ============== COMPARE CANDIDATES ============== -->
+    <div class="card block hidden" id="comparison">
+        <h2>📊 Compare Candidates</h2>
+        <p class="text-muted text-sm mb-4">Upload a JD and resumes to find the best matching candidates.</p>
+
+        <label>Upload JD</label>
+        <input type="file" id="compareJDFile" accept=".pdf">
+        <label>Upload Resumes</label>
+        <input type="file" id="compareResumeFiles" multiple accept=".pdf">
+        <label>Top N Candidates</label>
+        <input type="number" id="compareTopN" value="5" min="1" max="20">
+
+        <div class="flex gap-2 mt-4">
+            <button class="btn btn-primary" onclick="compareAndRank()">Find Top Matches</button>
+        </div>
+
+        <div id="comparisonLoading" class="hidden mt-4">
+            <div class="spinner"></div>
+            <span class="text-muted text-sm" style="margin-left:10px">Ranking candidates...</span>
+        </div>
+        <div id="comparisonResults" class="mt-6"></div>
+    </div>
+
+    <!-- ============== SCHEDULE INTERVIEW ============== -->
+    <div class="card block hidden" id="schedule-interview">
+        <h2>🎙️ Schedule AI Interview</h2>
+        <p class="text-muted text-sm mb-4">Send interview invitation to a candidate via email.</p>
+
+        <div class="search-box">
+            <input type="text" id="interviewCandidateSearch" placeholder="Search candidates..." onkeyup="filterInterviewCandidates()">
+        </div>
+        <select id="interviewCandidateSelect" onchange="selectInterviewCandidate()">
+            <option value="">Select Candidate</option>
+        </select>
+
+        <div id="interviewCandidatePreview" class="hidden mt-4"></div>
+
+        <div class="flex gap-2 mt-4">
+            <button class="btn btn-primary" onclick="sendInterviewInvite()">Send Interview Invite</button>
+        </div>
+
+        <div id="interviewResult" class="mt-4"></div>
+    </div>
+
+    <!-- ============== REPORTS ============== -->
+    <div class="card block hidden" id="reports">
+        <h2>📈 Reports & Analytics</h2>
+        <div class="search-box">
+            <input type="text" id="reportCandidateSearch" placeholder="Search candidates..." onkeyup="filterReportCandidates()">
+        </div>
+        <select id="reportCandidateSelect">
+            <option value="">Select Candidate</option>
+        </select>
+
+        <div class="flex gap-2 mt-4">
+            <button class="btn btn-primary" onclick="getRecruiterReport()">Interview Report</button>
+            <button class="btn btn-outline" onclick="getRecruiterAnalytics()">Overall Analytics</button>
+        </div>
+
+        <div class="dashboard-grid mt-6">
+            <div class="chart-card"><h3>Skill Radar</h3><canvas id="rSkillRadar"></canvas></div>
+            <div class="chart-card"><h3>Score Trend</h3><canvas id="rScoreTrend"></canvas></div>
+            <div class="chart-card"><h3>Candidate Comparison</h3><canvas id="rComparison"></canvas></div>
+            <div class="chart-card"><h3>Skill Scores</h3><canvas id="rSkillScores"></canvas></div>
+        </div>
+
+        <pre class="result-box mt-4 hidden" id="reportOutput"></pre>
+    </div>
+
+</div><!-- /content -->
+</div><!-- /page-container -->
+
+<script src="/shared/shared.js"></script>
+<script src="/recruiter/static/recruiter.js"></script>
+</body>
+</html>
+<!-- ---- END: Ishita - New recruiter dashboard page ---- -->

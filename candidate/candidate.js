@@ -1,0 +1,484 @@
+/* ---- START: Ishita - Candidate profile JS: load profile, render progress/stats/skills/interview analysis/charts/transcript/work experience ---- */
+/* ===================================================
+   Candidate Profile Page — JavaScript
+   =================================================== */
+
+let candidateData = null;
+let chartInstances = {};
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', async () => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if (!id) {
+        showError();
+        return;
+    }
+    await loadCandidateProfile(id);
+});
+
+async function loadCandidateProfile(candidateId) {
+    try {
+        const data = await apiGet(`/recruiter/candidate/${encodeURIComponent(candidateId)}`);
+        if (data.error) {
+            showError();
+            return;
+        }
+        candidateData = data;
+        renderProfile();
+    } catch {
+        showError();
+    }
+}
+
+function showError() {
+    hide('#loadingState');
+    show('#errorState');
+}
+
+/* ---------- Render Profile ---------- */
+function renderProfile() {
+    hide('#loadingState');
+    show('#profileContent');
+
+    const c = candidateData;
+
+    // Avatar
+    document.getElementById('profileAvatar').textContent = getInitials(c.name);
+
+    // Name & meta
+    setText('#profileName', c.name);
+    document.getElementById('profileMeta').innerHTML = [
+        c.email ? `📧 ${c.email}` : '',
+        c.phone ? `📱 ${c.phone}` : '',
+        c.location ? `📍 ${c.location}` : '',
+        c.linkedin ? `<a href="${c.linkedin}" target="_blank">LinkedIn</a>` : '',
+        c.github ? `<a href="${c.github}" target="_blank">GitHub</a>` : ''
+    ].filter(Boolean).join(' &nbsp;•&nbsp; ');
+
+    document.getElementById('profileKey').textContent = `🔑 ${c.id}`;
+
+    // Score badge
+    const score = c.interview_average_score || 0;
+    const scoreColor = score >= 7 ? 'var(--accent)' : score >= 4 ? 'var(--warning)' : 'var(--danger)';
+    setHTML('#profileScoreBadge', score > 0
+        ? `<div class="overall-score-ring" style="border-color:${scoreColor}; color:${scoreColor}">${score}</div><div class="text-sm text-muted mt-4">Avg Score</div>`
+        : '<span class="badge badge-neutral">Not Interviewed</span>'
+    );
+
+    renderProgress(c);
+    renderQuickStats(c);
+    renderJDMatch(c);
+    renderSkills(c);
+    renderInterviewAnalysis(c);
+    renderWorkExperience(c);
+    renderEducation(c);
+}
+
+/* ---------- Progress Stepper ---------- */
+function renderProgress(c) {
+    const stages = ['Resume Uploaded', 'Skills Extracted', 'JD Analyzed', 'Interview Scheduled', 'Interview Completed', 'Evaluated'];
+    let current = 0;
+    if (c.candidate_skills?.length > 0) current = 1;
+    if (c.jd_skills?.length > 0) current = 2;
+    if (c.interview_status === 'pending' || c.interview_status === 'active') current = 3;
+    if (c.interview_status === 'completed') current = 4;
+    if (c.interview_average_score > 0) current = 5;
+
+    setHTML('#progressStepper', renderProgressStepper(stages, current));
+}
+
+/* ---------- Quick Stats ---------- */
+function renderQuickStats(c) {
+    const skills = c.candidate_skills || [];
+    const jdSkills = c.jd_skills || [];
+    const transcript = c.ai_interview_transcript || c.transcript || [];
+    const matched = skills.filter(s => jdSkills.some(j => j.toLowerCase() === s.toLowerCase()));
+
+    setHTML('#quickStats', `
+        <div class="stat-card"><div class="stat-value">${skills.length}</div><div class="stat-label">Skills Found</div></div>
+        <div class="stat-card"><div class="stat-value">${c.years_experience || '—'}</div><div class="stat-label">Years Experience</div></div>
+        <div class="stat-card"><div class="stat-value">${matched.length}/${jdSkills.length || '—'}</div><div class="stat-label">JD Skills Matched</div></div>
+        <div class="stat-card"><div class="stat-value">${transcript.length}</div><div class="stat-label">Interview Questions</div></div>
+    `);
+}
+
+/* ---------- JD Match Section ---------- */
+function renderJDMatch(c) {
+    const container = document.getElementById('jdMatchSection');
+    if (!c.jd || !c.jd_skills?.length) {
+        container.innerHTML = '<p class="text-muted">No JD uploaded for this candidate yet.</p>';
+        return;
+    }
+
+    const cSkills = new Set((c.candidate_skills || []).map(s => s.toLowerCase()));
+    const jSkills = c.jd_skills || [];
+    const matched = jSkills.filter(s => cSkills.has(s.toLowerCase()));
+    const missing = jSkills.filter(s => !cSkills.has(s.toLowerCase()));
+    const matchPct = jSkills.length ? Math.round(matched.length / jSkills.length * 100) : 0;
+
+    let html = `
+    <div class="jd-match-card">
+        <h4>Job Description Match</h4>
+        ${renderGapBar('Overall Match', matchPct)}
+        <div class="gap-summary" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px">
+            <div>
+                <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">✅ Matched (${matched.length})</h4>
+                <div class="skill-tags">${matched.map(s => `<span class="skill-tag matched">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
+            </div>
+            <div>
+                <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">❌ Missing (${missing.length})</h4>
+                <div class="skill-tags">${missing.map(s => `<span class="skill-tag missing">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
+            </div>
+        </div>
+    </div>`;
+
+    // Show JD snippet
+    html += `<details class="mt-4">
+        <summary class="text-sm fw-600" style="cursor:pointer">View Job Description Text</summary>
+        <pre class="result-box mt-4" style="max-height:200px">${escapeHtml(truncate(c.jd, 2000))}</pre>
+    </details>`;
+
+    container.innerHTML = html;
+}
+
+/* ---------- Skills Overview ---------- */
+function renderSkills(c) {
+    const skills = c.candidate_skills || [];
+    const jdSkills = new Set((c.jd_skills || []).map(s => s.toLowerCase()));
+
+    setHTML('#skillsOverview', `
+        <div class="skill-tags">
+            ${skills.map(s => {
+                const isMatch = jdSkills.has(s.toLowerCase());
+                return `<span class="skill-tag ${isMatch ? 'matched' : ''}">${s}</span>`;
+            }).join('')}
+        </div>
+        ${skills.length === 0 ? '<p class="text-muted">No skills extracted yet.</p>' : ''}
+    `);
+}
+
+/* ---------- AI Interview Analysis ---------- */
+function renderInterviewAnalysis(c) {
+    const transcript = c.ai_interview_transcript || [];
+    const container = document.getElementById('interviewAnalysis');
+
+    if (transcript.length === 0) {
+        container.innerHTML = '<p class="text-muted">No AI interview data available. Interview has not been conducted yet.</p>';
+        hide('#chartSection');
+        return;
+    }
+
+    // Compute skill scores from AI transcript
+    const skillScores = {};
+    const scores = [];
+    transcript.forEach(item => {
+        if (item.analysis?.score !== undefined && item.analysis.score > 0) {
+            const skill = item.skill_area || 'General';
+            if (!skillScores[skill]) skillScores[skill] = [];
+            skillScores[skill].push(item.analysis.score);
+            scores.push(item.analysis.score);
+        }
+    });
+
+    const avgScores = {};
+    Object.entries(skillScores).forEach(([k, v]) => {
+        avgScores[k] = Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10;
+    });
+
+    const overallAvg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
+
+    // Summary
+    let strengths = [];
+    let weaknesses = [];
+    transcript.forEach(item => {
+        (item.analysis?.strengths || []).forEach(s => strengths.push(s));
+        (item.analysis?.weaknesses || []).forEach(w => weaknesses.push(w));
+    });
+
+    // Deduplicate
+    strengths = [...new Set(strengths)].slice(0, 8);
+    weaknesses = [...new Set(weaknesses)].slice(0, 8);
+
+    container.innerHTML = `
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" style="color:${getScoreColor(overallAvg * 10)}">${overallAvg}/10</div>
+                <div class="stat-label">Overall Score</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${transcript.length}</div>
+                <div class="stat-label">Questions Asked</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${Object.keys(avgScores).length}</div>
+                <div class="stat-label">Skill Areas Covered</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${c.interview_status || '—'}</div>
+                <div class="stat-label">Status</div>
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px">
+            <div>
+                <h4 style="font-size:13px; color:var(--accent-dark); margin-bottom:8px">💪 Key Strengths</h4>
+                ${strengths.map(s => `<div class="text-sm" style="padding:3px 0">• ${s}</div>`).join('') || '<span class="text-muted text-sm">None identified</span>'}
+            </div>
+            <div>
+                <h4 style="font-size:13px; color:var(--danger); margin-bottom:8px">⚠️ Areas for Improvement</h4>
+                ${weaknesses.map(w => `<div class="text-sm" style="padding:3px 0">• ${w}</div>`).join('') || '<span class="text-muted text-sm">None identified</span>'}
+            </div>
+        </div>
+    `;
+
+    // Charts
+    show('#chartSection');
+    if (Object.keys(avgScores).length > 0) {
+        renderCChart('cSkillRadar', 'radar', Object.keys(avgScores), Object.values(avgScores), 'Skill Score');
+        renderCChart('cSkillScores', 'bar', Object.keys(avgScores), Object.values(avgScores), 'Skill Score');
+    }
+
+    const trendLabels = [];
+    const trendData = [];
+    transcript.forEach((item, i) => {
+        if (item.analysis?.score !== undefined) {
+            trendLabels.push('Q' + (i + 1));
+            trendData.push(item.analysis.score);
+        }
+    });
+    if (trendLabels.length > 0) {
+        renderCChart('cScoreTrend', 'line', trendLabels, trendData, 'Score');
+    }
+
+    // Strengths vs Weakness chart
+    const sMap = {};
+    const wMap = {};
+    transcript.forEach(item => {
+        (item.analysis?.strengths || []).forEach(s => sMap[s] = (sMap[s] || 0) + 1);
+        (item.analysis?.weaknesses || []).forEach(w => wMap[w] = (wMap[w] || 0) + 1);
+    });
+    const allLabels = [...new Set([...Object.keys(sMap), ...Object.keys(wMap)])].slice(0, 10);
+    if (allLabels.length > 0) {
+        const ctx = document.getElementById('cStrengthWeakness');
+        if (chartInstances['cStrengthWeakness']) chartInstances['cStrengthWeakness'].destroy();
+        chartInstances['cStrengthWeakness'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: allLabels,
+                datasets: [
+                    { label: 'Strengths', data: allLabels.map(l => sMap[l] || 0), backgroundColor: 'rgba(16,185,129,0.7)' },
+                    { label: 'Weaknesses', data: allLabels.map(l => wMap[l] || 0), backgroundColor: 'rgba(239,68,68,0.7)' }
+                ]
+            },
+            options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }
+        });
+    }
+
+    // Render transcript items
+    renderTranscriptItems(transcript);
+}
+
+function renderTranscriptItems(transcript) {
+    const container = document.getElementById('transcriptSection');
+
+    container.innerHTML = transcript.map((item, i) => {
+        const score = item.analysis?.score;
+        const scoreClass = score >= 7 ? 'high-score' : score <= 3 ? 'low-score' : '';
+        const scoreColor = score >= 7 ? 'var(--accent)' : score >= 4 ? 'var(--warning)' : 'var(--danger)';
+
+        return `
+        <div class="transcript-item ${scoreClass}">
+            <div class="transcript-q">Q${i + 1} (${item.skill_area || 'General'}): ${item.question}</div>
+            <div class="transcript-a">${truncate(item.answer, 500)}</div>
+            <div class="transcript-meta">
+                ${score !== undefined ? `<span class="score-pill" style="background:${scoreColor}20; color:${scoreColor}">Score: ${score}/10</span>` : ''}
+                <span>${item.difficulty || ''}</span>
+                <span>${item.analysis?.feedback || ''}</span>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleTranscript() {
+    const section = document.getElementById('transcriptSection');
+    if (section.classList.contains('hidden')) show('#transcriptSection');
+    else hide('#transcriptSection');
+}
+
+/* ---------- Upload Transcript ---------- */
+function toggleUploadTranscript() {
+    const form = document.getElementById('uploadTranscriptForm');
+    if (form.classList.contains('hidden')) show('#uploadTranscriptForm');
+    else hide('#uploadTranscriptForm');
+}
+
+function handleTranscriptFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('transcriptText').value = e.target.result;
+    };
+    reader.readAsText(file);
+}
+
+async function submitTranscript() {
+    if (!candidateData) return;
+    const candidateId = candidateData.id || candidateData.candidate_id;
+    if (!candidateId) { alert('No candidate ID found.'); return; }
+
+    const text = document.getElementById('transcriptText').value.trim();
+    if (!text) { alert('Please paste or upload a transcript first.'); return; }
+
+    show('#transcriptUploadLoading');
+    setHTML('#transcriptUploadResult', '');
+
+    try {
+        const data = await apiPost(`/submit_transcript/${encodeURIComponent(candidateId)}`, { transcript: text });
+        hide('#transcriptUploadLoading');
+
+        if (data.error) {
+            setHTML('#transcriptUploadResult', `<p style="color:var(--danger)">${data.error}</p>`);
+            return;
+        }
+
+        setHTML('#transcriptUploadResult', `
+            <div style="padding:12px; background:var(--accent-bg, #f0f9ff); border-radius:8px; border:1px solid var(--accent, #2563eb)">
+                <strong>✅ Transcript uploaded successfully!</strong><br>
+                <span class="text-sm text-muted">${data.questions_added || 0} questions added • ${data.total_questions || 0} total questions</span>
+            </div>
+        `);
+
+        // Clear the form
+        document.getElementById('transcriptText').value = '';
+        document.getElementById('transcriptFile').value = '';
+
+        // Reload candidate profile to reflect new transcript
+        await loadCandidateProfile(candidateId);
+    } catch (err) {
+        hide('#transcriptUploadLoading');
+        setHTML('#transcriptUploadResult', `<p style="color:var(--danger)">Upload failed: ${err.message}</p>`);
+    }
+}
+
+/* ---------- Work Experience ---------- */
+function renderWorkExperience(c) {
+    const exp = c.work_experience || [];
+    const container = document.getElementById('workExperience');
+
+    if (exp.length === 0) {
+        container.innerHTML = '<p class="text-muted">No work experience data available.</p>';
+        return;
+    }
+
+    container.innerHTML = exp.map(e => `
+        <div class="timeline-item">
+            <div class="timeline-role">${e.role || 'Unknown Role'}</div>
+            <div class="timeline-company">${e.company || ''}</div>
+            <div class="timeline-duration">${e.duration || ''}</div>
+            <div class="timeline-desc">${e.description || ''}</div>
+        </div>
+    `).join('');
+}
+
+/* ---------- Education ---------- */
+function renderEducation(c) {
+    const edu = c.education || [];
+    const certs = c.certifications || [];
+    const container = document.getElementById('educationSection');
+
+    let html = '';
+
+    if (edu.length > 0) {
+        html += edu.map(e => `
+            <div style="margin-bottom:12px">
+                <div class="fw-600">${e.degree || ''}</div>
+                <div class="text-muted text-sm">${e.institution || ''} ${e.year ? '• ' + e.year : ''}</div>
+            </div>
+        `).join('');
+    }
+
+    if (certs.length > 0) {
+        html += '<h3 style="font-size:14px; margin-top:16px; margin-bottom:8px">📜 Certifications</h3>';
+        html += `<div class="skill-tags">${certs.map(c => `<span class="skill-tag highlight">${c}</span>`).join('')}</div>`;
+    }
+
+    if (!html) html = '<p class="text-muted">No education or certification data.</p>';
+    container.innerHTML = html;
+}
+
+/* ---------- Generate Report ---------- */
+async function generateReport() {
+    if (!candidateData) return;
+    const candidateId = candidateData.id || candidateData.candidate_id;
+    if (!candidateId) { alert('No candidate ID found.'); return; }
+
+    show('#reportSection');
+    show('#reportLoading');
+    hide('#reportChartSection');
+    hide('#reportOutput');
+    document.getElementById('reportSection').scrollIntoView({ behavior: 'smooth' });
+
+    try {
+        const data = await apiGet(`/interview_report/${encodeURIComponent(candidateId)}`);
+        hide('#reportLoading');
+
+        document.getElementById('reportOutput').textContent = JSON.stringify(data, null, 2);
+        show('#reportOutput');
+
+        // Render charts from report data
+        const report = data.report || data;
+        if (report.skill_scores) {
+            show('#reportChartSection');
+            renderCChart('rptSkillRadar', 'radar', Object.keys(report.skill_scores), Object.values(report.skill_scores), 'Skill Score');
+            renderCChart('rptSkillScores', 'bar', Object.keys(report.skill_scores), Object.values(report.skill_scores), 'Skill Score');
+        }
+        const transcript = report.transcript || data.transcript || [];
+        if (transcript.length > 0) {
+            show('#reportChartSection');
+            renderCChart('rptScoreTrend', 'line', transcript.map((_, i) => 'Q' + (i + 1)), transcript.map(q => (q.evaluation?.score || q.analysis?.score || 0)), 'Answer Score');
+        }
+    } catch (err) {
+        hide('#reportLoading');
+        document.getElementById('reportOutput').textContent = 'Error generating report: ' + err.message;
+        show('#reportOutput');
+    }
+}
+
+function closeReport() {
+    hide('#reportSection');
+}
+
+/* ---------- Chart Helper ---------- */
+function renderCChart(canvasId, type, labels, data, label) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+    const opts = type === 'radar'
+        ? { scales: { r: { suggestedMin: 0, suggestedMax: 10 } } }
+        : { responsive: true, scales: { y: { min: 0, max: 10 } } };
+
+    chartInstances[canvasId] = new Chart(ctx, {
+        type,
+        data: {
+            labels,
+            datasets: [{
+                label,
+                data,
+                tension: type === 'line' ? 0.3 : undefined,
+                backgroundColor: type === 'bar' ? 'rgba(37,99,235,0.7)' : undefined,
+                borderColor: type === 'line' ? 'rgba(37,99,235,1)' : undefined
+            }]
+        },
+        options: opts
+    });
+}
+
+/* ---------- Util ---------- */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+/* ---- END: Ishita - Candidate profile JS ---- */

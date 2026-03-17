@@ -11,7 +11,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install all required libraries
-pip install fastapi uvicorn python-dotenv boto3 faiss-cpu numpy pdfplumber tinydb python-multipart 'uvicorn[standard]
+pip install fastapi uvicorn python-dotenv boto3 faiss-cpu numpy pdfplumber tinydb python-multipart 'uvicorn[standard]'
 
 Breakdown of libraries
 -----------------------
