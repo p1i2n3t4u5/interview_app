@@ -1017,6 +1017,12 @@ async def rank_candidates(
             continue
         skills = c.get("candidate_skills", [])
         score = compute_match_score(skills, jd_skills)
+
+        # Store JD data on candidate
+        c["jd"] = jd_text
+        c["jd_skills"] = jd_skills
+        candidates_table.upsert(c, Candidate.id == cid)
+
         results.append({
             "candidate_id": cid,
             "candidate": c["name"],
@@ -1122,29 +1128,54 @@ def match_job(job_id: str):
     if not job:
         return {"error": "Job not found"}
     jd_skills = job.get("jd_skills", [])
+    jd_text = job.get("jd_text", "")
+    job_title = job.get("title", "")
     all_candidates = candidates_table.all()
     results = []
+    Candidate = Query()
     for cand in all_candidates:
         cand_skills = cand.get("candidate_skills", [])
         if not cand_skills:
             continue
         match_result = ai_skill_match(cand_skills, jd_skills)
         ai_summary = generate_candidate_summary(cand, jd_skills)
+        cand_id = cand.get("id", cand.get("candidate_id", ""))
+        match_percent = match_result.get("match_percent", 0)
+
+        # Store job match on candidate
+        job_matches = cand.get("job_matches", [])
+        # Update existing match for this job or add new
+        job_matches = [m for m in job_matches if m.get("job_id") != job_id]
+        job_matches.append({
+            "job_id": job_id,
+            "title": job_title,
+            "jd_skills": jd_skills,
+            "matched_skills": match_result.get("matched_skills", []),
+            "missing_skills": match_result.get("missing_skills", []),
+            "match_percent": match_percent,
+            "ai_summary": ai_summary,
+        })
+        cand["job_matches"] = job_matches
+        # Also store latest JD for backward compatibility
+        cand["jd"] = jd_text
+        cand["jd_skills"] = jd_skills
+        candidates_table.upsert(cand, Candidate.id == cand_id)
+
         results.append({
-            "candidate_id": cand.get("id", cand.get("candidate_id", "")),
+            "candidate_id": cand_id,
             "name": cand.get("name", ""),
             "candidate_skills": cand_skills,
             "years_experience": cand.get("years_experience", 0),
             "matched_skills": match_result.get("matched_skills", []),
             "missing_skills": match_result.get("missing_skills", []),
-            "match_percent": match_result.get("match_percent", 0),
+            "match_percent": match_percent,
             "ai_summary": ai_summary,
             "status": cand.get("status", "new"),
         })
     results.sort(key=lambda x: x["match_percent"], reverse=True)
     return {
         "job_id": job_id,
-        "title": job.get("title", ""),
+        "title": job_title,
         "jd_skills": jd_skills,
         "candidates": results,
     }

@@ -106,38 +106,68 @@ function renderQuickStats(c) {
 /* ---------- JD Match Section ---------- */
 function renderJDMatch(c) {
     const container = document.getElementById('jdMatchSection');
-    if (!c.jd || !c.jd_skills?.length) {
+    const jobMatches = c.job_matches || [];
+    const hasLegacyJD = c.jd && c.jd_skills?.length;
+
+    if (!jobMatches.length && !hasLegacyJD) {
         container.innerHTML = '<p class="text-muted">No JD uploaded for this candidate yet.</p>';
         return;
     }
 
-    const cSkills = new Set((c.candidate_skills || []).map(s => s.toLowerCase()));
-    const jSkills = c.jd_skills || [];
-    const matched = jSkills.filter(s => cSkills.has(s.toLowerCase()));
-    const missing = jSkills.filter(s => !cSkills.has(s.toLowerCase()));
-    const matchPct = jSkills.length ? Math.round(matched.length / jSkills.length * 100) : 0;
+    let html = '';
 
-    let html = `
-    <div class="jd-match-card">
-        <h4>Job Description Match</h4>
-        ${renderGapBar('Overall Match', matchPct)}
-        <div class="gap-summary" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px">
-            <div>
-                <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">✅ Matched (${matched.length})</h4>
-                <div class="skill-tags">${matched.map(s => `<span class="skill-tag matched">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
-            </div>
-            <div>
-                <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">❌ Missing (${missing.length})</h4>
-                <div class="skill-tags">${missing.map(s => `<span class="skill-tag missing">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
-            </div>
-        </div>
-    </div>`;
+    // Render each job match
+    if (jobMatches.length > 0) {
+        jobMatches.forEach(match => {
+            const matchPct = match.match_percent || 0;
+            const matched = match.matched_skills || [];
+            const missing = match.missing_skills || [];
+            html += `
+            <div class="jd-match-card" style="margin-bottom:16px">
+                <h4>${match.title || 'Job'} <span class="text-muted text-sm">(${match.job_id || ''})</span></h4>
+                ${match.ai_summary ? `<p class="text-sm text-muted" style="margin-bottom:8px">${match.ai_summary}</p>` : ''}
+                ${renderGapBar('Overall Match', matchPct)}
+                <div class="gap-summary" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px">
+                    <div>
+                        <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">✅ Matched (${matched.length})</h4>
+                        <div class="skill-tags">${matched.map(s => `<span class="skill-tag matched">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
+                    </div>
+                    <div>
+                        <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">❌ Missing (${missing.length})</h4>
+                        <div class="skill-tags">${missing.map(s => `<span class="skill-tag missing">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
+                    </div>
+                </div>
+            </div>`;
+        });
+    } else if (hasLegacyJD) {
+        // Fallback to legacy single JD match
+        const cSkills = new Set((c.candidate_skills || []).map(s => s.toLowerCase()));
+        const jSkills = c.jd_skills || [];
+        const matched = jSkills.filter(s => cSkills.has(s.toLowerCase()));
+        const missing = jSkills.filter(s => !cSkills.has(s.toLowerCase()));
+        const matchPct = jSkills.length ? Math.round(matched.length / jSkills.length * 100) : 0;
 
-    // Show JD snippet
-    html += `<details class="mt-4">
-        <summary class="text-sm fw-600" style="cursor:pointer">View Job Description Text</summary>
-        <pre class="result-box mt-4" style="max-height:200px">${escapeHtml(truncate(c.jd, 2000))}</pre>
-    </details>`;
+        html += `
+        <div class="jd-match-card">
+            <h4>Job Description Match</h4>
+            ${renderGapBar('Overall Match', matchPct)}
+            <div class="gap-summary" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px">
+                <div>
+                    <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">✅ Matched (${matched.length})</h4>
+                    <div class="skill-tags">${matched.map(s => `<span class="skill-tag matched">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
+                </div>
+                <div>
+                    <h4 style="font-size:12px; color:var(--text-muted); text-transform:uppercase">❌ Missing (${missing.length})</h4>
+                    <div class="skill-tags">${missing.map(s => `<span class="skill-tag missing">${s}</span>`).join('') || '<span class="text-muted text-sm">None</span>'}</div>
+                </div>
+            </div>
+        </div>`;
+
+        html += `<details class="mt-4">
+            <summary class="text-sm fw-600" style="cursor:pointer">View Job Description Text</summary>
+            <pre class="result-box mt-4" style="max-height:200px">${escapeHtml(truncate(c.jd, 2000))}</pre>
+        </details>`;
+    }
 
     container.innerHTML = html;
 }
@@ -159,25 +189,44 @@ function renderSkills(c) {
 }
 
 /* ---------- AI Interview Analysis ---------- */
+
+// Normalize transcript item fields (AI interview uses analysis/skill_area, manual uses evaluation/skill)
+function normalizeTranscriptItem(item) {
+    return {
+        question: item.question || '',
+        answer: item.answer || '',
+        skill_area: item.skill_area || item.skill || 'General',
+        difficulty: item.difficulty || '',
+        score: item.analysis?.score ?? item.evaluation?.score ?? undefined,
+        strengths: item.analysis?.strengths || item.evaluation?.strengths || [],
+        weaknesses: item.analysis?.weaknesses || item.evaluation?.weaknesses || [],
+        feedback: item.analysis?.feedback || item.evaluation?.feedback || '',
+    };
+}
+
 function renderInterviewAnalysis(c) {
-    const transcript = c.ai_interview_transcript || [];
+    // Merge both AI interview transcript and manual transcript
+    const aiTranscript = c.ai_interview_transcript || [];
+    const manualTranscript = c.transcript || [];
+    const rawTranscript = aiTranscript.length > 0 ? aiTranscript : manualTranscript;
+    const transcript = rawTranscript.map(normalizeTranscriptItem);
     const container = document.getElementById('interviewAnalysis');
 
     if (transcript.length === 0) {
-        container.innerHTML = '<p class="text-muted">No AI interview data available. Interview has not been conducted yet.</p>';
+        container.innerHTML = '<p class="text-muted">No interview data available. Interview has not been conducted yet.</p>';
         hide('#chartSection');
         return;
     }
 
-    // Compute skill scores from AI transcript
+    // Compute skill scores from transcript
     const skillScores = {};
     const scores = [];
     transcript.forEach(item => {
-        if (item.analysis?.score !== undefined && item.analysis.score > 0) {
-            const skill = item.skill_area || 'General';
+        if (item.score !== undefined && item.score > 0) {
+            const skill = item.skill_area;
             if (!skillScores[skill]) skillScores[skill] = [];
-            skillScores[skill].push(item.analysis.score);
-            scores.push(item.analysis.score);
+            skillScores[skill].push(item.score);
+            scores.push(item.score);
         }
     });
 
@@ -192,8 +241,8 @@ function renderInterviewAnalysis(c) {
     let strengths = [];
     let weaknesses = [];
     transcript.forEach(item => {
-        (item.analysis?.strengths || []).forEach(s => strengths.push(s));
-        (item.analysis?.weaknesses || []).forEach(w => weaknesses.push(w));
+        item.strengths.forEach(s => strengths.push(s));
+        item.weaknesses.forEach(w => weaknesses.push(w));
     });
 
     // Deduplicate
@@ -241,9 +290,9 @@ function renderInterviewAnalysis(c) {
     const trendLabels = [];
     const trendData = [];
     transcript.forEach((item, i) => {
-        if (item.analysis?.score !== undefined) {
+        if (item.score !== undefined) {
             trendLabels.push('Q' + (i + 1));
-            trendData.push(item.analysis.score);
+            trendData.push(item.score);
         }
     });
     if (trendLabels.length > 0) {
@@ -254,8 +303,8 @@ function renderInterviewAnalysis(c) {
     const sMap = {};
     const wMap = {};
     transcript.forEach(item => {
-        (item.analysis?.strengths || []).forEach(s => sMap[s] = (sMap[s] || 0) + 1);
-        (item.analysis?.weaknesses || []).forEach(w => wMap[w] = (wMap[w] || 0) + 1);
+        item.strengths.forEach(s => sMap[s] = (sMap[s] || 0) + 1);
+        item.weaknesses.forEach(w => wMap[w] = (wMap[w] || 0) + 1);
     });
     const allLabels = [...new Set([...Object.keys(sMap), ...Object.keys(wMap)])].slice(0, 10);
     if (allLabels.length > 0) {
@@ -282,18 +331,18 @@ function renderTranscriptItems(transcript) {
     const container = document.getElementById('transcriptSection');
 
     container.innerHTML = transcript.map((item, i) => {
-        const score = item.analysis?.score;
+        const score = item.score;
         const scoreClass = score >= 7 ? 'high-score' : score <= 3 ? 'low-score' : '';
         const scoreColor = score >= 7 ? 'var(--accent)' : score >= 4 ? 'var(--warning)' : 'var(--danger)';
 
         return `
         <div class="transcript-item ${scoreClass}">
-            <div class="transcript-q">Q${i + 1} (${item.skill_area || 'General'}): ${item.question}</div>
+            <div class="transcript-q">Q${i + 1} (${item.skill_area}): ${item.question}</div>
             <div class="transcript-a">${truncate(item.answer, 500)}</div>
             <div class="transcript-meta">
                 ${score !== undefined ? `<span class="score-pill" style="background:${scoreColor}20; color:${scoreColor}">Score: ${score}/10</span>` : ''}
                 <span>${item.difficulty || ''}</span>
-                <span>${item.analysis?.feedback || ''}</span>
+                <span>${item.feedback || ''}</span>
             </div>
         </div>`;
     }).join('');
