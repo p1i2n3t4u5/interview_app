@@ -5,11 +5,15 @@ let recognition = null;
 let isListening = false;
 let currentAnswer = "";
 let currentAudio = null;
+let totalQuestions = 0;
+let photoCaptureInterval = null;
+let interviewToken = null;
 
 // On page load, validate the token from URL
 document.addEventListener("DOMContentLoaded", async () => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
+    interviewToken = token;
 
     if (!token) {
         showError("No interview token provided. Please use the link from your invitation email.");
@@ -26,6 +30,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         candidateData = data;
+        totalQuestions = data.total_questions || 0;
         showPermissionState(data.candidate_name);
     } catch (err) {
         showError("Unable to connect to the server. Please try again later.");
@@ -43,6 +48,12 @@ function showPermissionState(name) {
     document.getElementById("permissionState").style.display = "flex";
     document.getElementById("candidateName").textContent = name;
     document.getElementById("readyCandidateName").textContent = name;
+    const totalQEl = document.getElementById("totalQuestionsInfo");
+    if (totalQEl && totalQuestions > 0) {
+        totalQEl.textContent = totalQuestions;
+    }
+    // Initialize progress bar with actual count
+    updateProgress(0, totalQuestions || "--");
 }
 
 async function requestMediaAccess() {
@@ -98,6 +109,9 @@ function startInterview() {
     interviewVideo.srcObject = mediaStream;
 
     setStatus("connecting", "Connecting...");
+
+    // Start random photo capture
+    startPhotoCapture();
 
     const token = new URLSearchParams(window.location.search).get("token");
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -193,15 +207,16 @@ function muteMic(mute) {
 function beginListening() {
     currentAnswer = "";
     const answerArea = document.getElementById("answerArea");
-    const answerPreview = document.getElementById("answerPreview");
-    const submitBtn = document.getElementById("submitAnswerBtn");
     const textAnswer = document.getElementById("textAnswer");
+    const submitBtn = document.getElementById("submitAnswerBtn");
 
     answerArea.style.display = "block";
-    answerPreview.textContent = "";
     textAnswer.value = "";
     submitBtn.disabled = true;
-    setStatus("listening", "Listening... speak your answer");
+    setStatus("listening", "Listening... speak or type your answer");
+
+    // Enable submit button when user types
+    textAnswer.addEventListener("input", onTextInput);
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -233,7 +248,8 @@ function beginListening() {
 
         hasSpoken = true;
         currentAnswer = finalTranscript + interim;
-        answerPreview.textContent = currentAnswer;
+        // Update the unified textarea with speech recognition results
+        textAnswer.value = currentAnswer;
         submitBtn.disabled = false;
 
         clearTimeout(silenceTimer);
@@ -247,7 +263,6 @@ function beginListening() {
 
     recognition.onerror = (event) => {
         if (event.error === "no-speech") {
-            // Restart recognition if no speech detected
             try { recognition.start(); } catch (e) {}
         }
     };
@@ -262,6 +277,12 @@ function beginListening() {
     try { recognition.start(); } catch (e) {}
 }
 
+function onTextInput() {
+    const textAnswer = document.getElementById("textAnswer");
+    const submitBtn = document.getElementById("submitAnswerBtn");
+    submitBtn.disabled = !textAnswer.value.trim();
+}
+
 function stopListening() {
     isListening = false;
     if (recognition) {
@@ -273,15 +294,17 @@ function stopListening() {
 function submitCurrentAnswer() {
     stopListening();
 
-    const text = currentAnswer.trim() || document.getElementById("textAnswer").value.trim();
+    const textAnswer = document.getElementById("textAnswer");
+    const text = currentAnswer.trim() || textAnswer.value.trim();
     if (!text) return;
 
     setStatus("analyzing", "Analyzing your response...");
     addToTranscript("user", text);
 
     document.getElementById("answerArea").style.display = "none";
-    document.getElementById("answerPreview").textContent = "";
-    document.getElementById("textAnswer").value = "";
+    textAnswer.removeEventListener("input", onTextInput);
+    textAnswer.value = "";
+    currentAnswer = "";
 
     ws.send(JSON.stringify({ type: "answer", text: text }));
 }
@@ -356,6 +379,7 @@ function addToTranscript(role, text) {
 
 function showComplete(message) {
     stopListening();
+    stopPhotoCapture();
     document.getElementById("interviewState").style.display = "none";
     document.getElementById("completeState").style.display = "flex";
     document.getElementById("completeMessage").textContent = message;
@@ -370,3 +394,68 @@ function showInterviewError(message) {
     setStatus("error", message);
     addToTranscript("ai", "Error: " + message);
 }
+
+// ===========================
+// Photo Capture to S3
+// ===========================
+
+function startPhotoCapture() {
+    captureAndUploadPhoto("");
+    // Capture at random intervals between 15-45 seconds
+    scheduleNextCapture();
+}
+
+function scheduleNextCapture() {
+    const delay = (15 + Math.random() * 30) * 1000;
+    photoCaptureInterval = setTimeout(() => {
+        captureAndUploadPhoto("");
+        scheduleNextCapture();
+    }, delay);
+}
+
+function stopPhotoCapture() {
+    if (photoCaptureInterval) {
+        clearTimeout(photoCaptureInterval);
+        photoCaptureInterval = null;
+    }
+}
+
+function captureAndUploadPhoto(flag) {
+    const video = document.getElementById("interviewVideo");
+    if (!video || !video.srcObject) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const photoData = canvas.toDataURL("image/jpeg", 0.7);
+
+    fetch("/upload_photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            token: interviewToken,
+            photo: photoData,
+            flag: flag
+        })
+    }).catch(err => console.warn("Photo upload failed:", err));
+}
+
+// ===========================
+// Tab Visibility Detection
+// ===========================
+
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden && document.getElementById("interviewState").style.display !== "none") {
+        captureAndUploadPhoto("tab_switch");
+        addToTranscript("ai", "Warning: Tab switch detected. Please stay on this page during the interview.");
+    }
+});
+
+window.addEventListener("blur", () => {
+    if (document.getElementById("interviewState").style.display !== "none") {
+        captureAndUploadPhoto("window_blur");
+    }
+});

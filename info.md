@@ -11,7 +11,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install all required libraries
-pip install fastapi uvicorn python-dotenv boto3 faiss-cpu numpy pdfplumber tinydb python-multipart
+pip install fastapi uvicorn python-dotenv boto3 faiss-cpu numpy pdfplumber tinydb python-multipart 'uvicorn[standard]
 
 Breakdown of libraries
 -----------------------
@@ -24,6 +24,8 @@ faiss-cpu	Vector similarity search for RAG
 numpy	Numerical operations & embeddings
 pdfplumber	Extract text from PDF resumes & JDs
 tinydb	File-based database to persist candidates & transcripts
+uvicorn[standard] Uvicorn needs a WebSocket protocol library. The basic uvicorn package doesn't include one.
+
 
 Start server
 ------------

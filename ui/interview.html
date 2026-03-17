@@ -27,8 +27,36 @@
         <p class="subtitle">AI-Powered Interview Session</p>
 
         <div class="permission-card">
-            <h3>Before we begin, we need access to your camera and microphone.</h3>
-            <p>This is required for the interview session. Please click the button below and allow access when prompted by your browser.</p>
+            <h3>Before we begin, please review the following guidelines:</h3>
+
+            <div class="rules-section">
+                <div class="rule-item warning">
+                    <span class="rule-icon">&#9888;</span>
+                    <span>Do <strong>not</strong> open new browser tabs, switch tabs, or refresh this page. Any such activity will be <strong>flagged</strong>.</span>
+                </div>
+                <div class="rule-item warning">
+                    <span class="rule-icon">&#128065;</span>
+                    <span>Please keep looking at the screen throughout the interview. Looking away will be <strong>detected and flagged</strong>.</span>
+                </div>
+                <div class="rule-item warning">
+                    <span class="rule-icon">&#128247;</span>
+                    <span>Random photos will be captured during the interview for identity verification. Please ensure your face is visible.</span>
+                </div>
+                <div class="rule-item info">
+                    <span class="rule-icon">&#127908;</span>
+                    <span>You can speak your answers or type them in the text box provided.</span>
+                </div>
+                <div class="rule-item info">
+                    <span class="rule-icon">&#9201;</span>
+                    <span>The interview will consist of <strong><span id="totalQuestionsInfo">--</span> questions</strong>. Take your time with each answer.</span>
+                </div>
+                <div class="rule-item info">
+                    <span class="rule-icon">&#128274;</span>
+                    <span>This session link is single-use and will expire after the interview is completed.</span>
+                </div>
+            </div>
+
+            <p style="margin-top: 18px;">We need access to your <strong>camera</strong> and <strong>microphone</strong> to proceed.</p>
 
             <div class="permission-status">
                 <div class="status-item">
@@ -91,7 +119,7 @@
                     <div class="progress-bar">
                         <div id="progressFill" class="progress-fill" style="width: 0%"></div>
                     </div>
-                    <div id="progressText" class="progress-text">0 / 30</div>
+                    <div id="progressText" class="progress-text">0 / --</div>
                 </div>
                 <div class="skill-badge" id="skillBadge" style="display: none;">
                     <span class="skill-label">Skill:</span>
@@ -108,10 +136,9 @@
                         <span id="statusIcon" class="pulse-dot"></span>
                         <span id="answerStatus">Listening...</span>
                     </div>
-                    <div id="answerPreview" class="answer-preview"></div>
                     <div class="answer-actions">
+                        <textarea id="textAnswer" class="text-input-unified" placeholder="Speak or type your answer here..." rows="3"></textarea>
                         <button id="submitAnswerBtn" onclick="manualSubmit()" disabled>Submit Answer</button>
-                        <textarea id="textAnswer" class="text-fallback" placeholder="Or type your answer here..." rows="2"></textarea>
                     </div>
                 </div>
             </div>
