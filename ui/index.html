@@ -58,7 +58,6 @@
             <h2>📋 Upload Job Description</h2>
             <p class="section-desc">Upload a JD to extract required skills and match against all candidates.</p>
             <div class="form-row">
-               <input type="text" id="jobTitle" placeholder="Job title (optional, AI will extract if empty)">
                <div class="upload-inline">
                   <input type="file" id="jdFile" accept=".pdf">
                   <button class="btn-primary" onclick="uploadJob()">Upload JD</button>
@@ -71,29 +70,38 @@
                      <h3 id="jdTitle"></h3>
                   </div>
                   <div class="skill-tags" id="jdSkills"></div>
-                  <button class="btn-accent" onclick="matchCandidates()">🔍 Analyze All Candidates Against This JD</button>
                </div>
 
+               <!-- Analyze All Candidates -->
+               <details id="analyzeAllPanel" class="job-card" style="margin-top:16px; cursor:default">
+                  <summary style="cursor:pointer; font-weight:600; font-size:1rem">🔍 Analyze All Candidates Against This JD</summary>
+                  <div style="margin-top:12px">
+                     <button class="btn-accent" onclick="matchCandidates()">🔍 Run Analysis</button>
+                  </div>
+               </details>
+
                <!-- Candidate Selection & Top N Ranking -->
-               <div class="job-card" style="margin-top:16px">
-                  <h3>🏆 Find Top Matching Candidates</h3>
-                  <p class="section-desc">Select candidates to rank against this JD, or select all.</p>
-                  <div class="form-row" style="margin-bottom:12px; align-items:center">
-                     <input type="text" id="jdCandidateFilter" placeholder="Filter candidates..." onkeyup="filterJDCandidateList()">
-                     <label style="display:flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer">
-                        <input type="checkbox" id="jdSelectAll" onchange="toggleJDSelectAll(this)"> Select All
-                     </label>
-                     <div style="display:flex; align-items:center; gap:6px; white-space:nowrap">
-                        <label>Top N:</label>
-                        <input type="number" id="jdTopN" value="5" min="1" max="50" style="max-width:70px">
+               <details id="findTopPanel" class="job-card" style="margin-top:16px; cursor:default">
+                  <summary style="cursor:pointer; font-weight:600; font-size:1rem">🏆 Find Top Matching Candidates</summary>
+                  <div style="margin-top:12px">
+                     <p class="section-desc">Select candidates to rank against this JD, or select all.</p>
+                     <div class="form-row" style="margin-bottom:12px; align-items:center">
+                        <input type="text" id="jdCandidateFilter" placeholder="Filter candidates..." onkeyup="filterJDCandidateList()">
+                        <label style="display:flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer">
+                           <input type="checkbox" id="jdSelectAll" onchange="toggleJDSelectAll(this)"> Select All
+                        </label>
+                        <div style="display:flex; align-items:center; gap:6px; white-space:nowrap">
+                           <label>Top N:</label>
+                           <input type="number" id="jdTopN" value="5" min="1" max="50" style="max-width:70px">
+                        </div>
+                     </div>
+                     <div id="jdCandidateCheckboxes" class="candidate-checkbox-grid" style="max-height:200px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; padding:10px; margin-bottom:12px"></div>
+                     <button class="btn-primary" onclick="rankSelectedCandidates()">🏆 Find Top Candidates</button>
+                     <div id="rankLoading" class="hidden" style="margin-top:12px">
+                        <span>⏳ Ranking candidates with AI...</span>
                      </div>
                   </div>
-                  <div id="jdCandidateCheckboxes" class="candidate-checkbox-grid" style="max-height:200px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; padding:10px; margin-bottom:12px"></div>
-                  <button class="btn-primary" onclick="rankSelectedCandidates()">🏆 Find Top Candidates</button>
-                  <div id="rankLoading" class="hidden" style="margin-top:12px">
-                     <span>⏳ Ranking candidates with AI...</span>
-                  </div>
-               </div>
+               </details>
             </div>
 
             <!-- Ranking Results -->

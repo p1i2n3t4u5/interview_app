@@ -146,14 +146,12 @@ async function uploadJob() {
     const file = document.getElementById('jdFile').files[0];
     if (!file) return alert("Select a JD PDF file");
 
-    const title = document.getElementById('jobTitle').value;
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("title", title);
+    formData.append("title", "");
 
-    const btn = event.target;
-    btn.textContent = '⏳ Analyzing...';
-    btn.disabled = true;
+    const btn = document.querySelector('#jdSection .btn-primary');
+    if (btn) { btn.textContent = '⏳ Analyzing...'; btn.disabled = true; }
 
     try {
         const res = await fetch('/upload_job', { method: 'POST', body: formData });
@@ -171,8 +169,7 @@ async function uploadJob() {
     } catch (err) {
         alert('Error uploading JD: ' + err.message);
     } finally {
-        btn.textContent = 'Upload JD';
-        btn.disabled = false;
+        if (btn) { btn.textContent = 'Upload JD'; btn.disabled = false; }
     }
 }
 
@@ -182,9 +179,13 @@ async function uploadJob() {
 async function matchCandidates() {
     if (!currentJobId) return alert("Upload a JD first");
 
-    const btn = event.target;
-    btn.textContent = '⏳ Matching with AI...';
-    btn.disabled = true;
+    // Collapse the other panel and hide its results
+    const findTopPanel = document.getElementById('findTopPanel');
+    if (findTopPanel) findTopPanel.removeAttribute('open');
+    document.getElementById('rankResults')?.classList.add('hidden');
+
+    const btn = document.querySelector('#analyzeAllPanel .btn-accent');
+    if (btn) { btn.textContent = '⏳ Matching with AI...'; btn.disabled = true; }
 
     try {
         const res = await fetch(`/match_job/${currentJobId}`, { method: 'POST' });
@@ -196,8 +197,7 @@ async function matchCandidates() {
     } catch (err) {
         alert('Error matching: ' + err.message);
     } finally {
-        btn.textContent = '🔍 Analyze All Candidates Against This JD';
-        btn.disabled = false;
+        if (btn) { btn.textContent = '🔍 Run Analysis'; btn.disabled = false; }
     }
 }
 
@@ -612,6 +612,11 @@ async function rankSelectedCandidates() {
 
     const selected = Array.from(document.querySelectorAll('#jdCandidateCheckboxes .jd-cand-cb:checked')).map(cb => cb.value);
     if (selected.length === 0) { alert('Please select at least one candidate.'); return; }
+
+    // Collapse the other panel and hide its results
+    const analyzePanel = document.getElementById('analyzeAllPanel');
+    if (analyzePanel) analyzePanel.removeAttribute('open');
+    document.getElementById('matchResults')?.classList.add('hidden');
 
     const topN = parseInt(document.getElementById('jdTopN').value) || 5;
 
