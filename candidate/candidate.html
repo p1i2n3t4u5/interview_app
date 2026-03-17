@@ -109,6 +109,34 @@
             </div>
         </div>
 
+        <!-- Overall Feedback & Recommendation -->
+        <div class="card" id="overallFeedbackSection">
+            <h2>📊 Overall Feedback &amp; Recommendation</h2>
+            <div id="overallFeedback"></div>
+            <div class="dashboard-grid mt-6" id="skillRatingsChartSection" style="grid-template-columns:1fr">
+                <div class="chart-card"><h3>Skill Ratings</h3><canvas id="cSkillRatings"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Proctoring & Integrity -->
+        <div class="card" id="proctoringSection">
+            <div class="card-header">
+                <h2>🛡️ Proctoring &amp; Integrity</h2>
+                <button class="btn btn-outline btn-sm" onclick="toggleProctoringDetails()">Show/Hide Details</button>
+            </div>
+            <div id="proctoringOverview"></div>
+            <div class="dashboard-grid mt-6" id="proctoringCharts">
+                <div class="chart-card"><h3>Flag Distribution</h3><canvas id="cFlagDistribution"></canvas></div>
+                <div class="chart-card"><h3>Flag Timeline</h3><canvas id="cFlagTimeline"></canvas></div>
+            </div>
+            <div id="proctoringDetails" class="hidden mt-4">
+                <h3 style="font-size:14px; margin-bottom:12px">Flag Details</h3>
+                <div id="flagDetailsList"></div>
+                <div id="snapshotGallery" class="mt-4"></div>
+            </div>
+            <div id="proctoringVideo" class="mt-4"></div>
+        </div>
+
         <!-- Interview Transcript -->
         <div class="card">
             <div class="card-header">
