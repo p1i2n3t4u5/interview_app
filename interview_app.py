@@ -92,18 +92,28 @@ def ensure_s3_bucket():
         try:
             s3_client.head_bucket(Bucket=bucket_name)
             print(f"S3 bucket '{bucket_name}' exists.")
-        except Exception:
-            try:
-                if AWS_REGION == "us-east-1":
-                    s3_client.create_bucket(Bucket=bucket_name)
-                else:
-                    s3_client.create_bucket(
-                        Bucket=bucket_name,
-                        CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
-                    )
-                print(f"Created S3 bucket: {bucket_name}")
-            except Exception as e:
-                print(f"Warning: Could not create/access S3 bucket '{bucket_name}': {e}")
+        except s3_client.exceptions.ClientError as e:
+            error_code = int(e.response["Error"].get("Code", 0))
+            if error_code == 404:
+                # Bucket genuinely doesn't exist — create it
+                try:
+                    if AWS_REGION == "us-east-1":
+                        s3_client.create_bucket(Bucket=bucket_name)
+                    else:
+                        s3_client.create_bucket(
+                            Bucket=bucket_name,
+                            CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+                        )
+                    print(f"Created S3 bucket: {bucket_name}")
+                except Exception as ce:
+                    print(f"Warning: Could not create S3 bucket '{bucket_name}': {ce}")
+            elif error_code == 403:
+                # Bucket exists but we lack permissions — that's fine, skip
+                print(f"S3 bucket '{bucket_name}' exists (access restricted, skipping creation).")
+            else:
+                print(f"Warning: Could not check S3 bucket '{bucket_name}': {e}")
+        except Exception as e:
+            print(f"Warning: S3 bucket check failed for '{bucket_name}': {e}")
 
 
 @app.on_event("startup")
