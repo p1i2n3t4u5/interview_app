@@ -361,6 +361,48 @@ async function submitTranscript() {
     }
 }
 
+/* ---------- Send Interview Invite ---------- */
+async function sendInterviewInvite() {
+    if (!candidateData) return;
+    const candidateId = candidateData.id || candidateData.candidate_id;
+    const name = candidateData.name || '';
+    const email = candidateData.email || '';
+
+    if (!email) {
+        setHTML('#inviteResult', `<div style="padding:12px; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; color:var(--danger)">⚠️ No email found for this candidate. Cannot send invite.</div>`);
+        show('#inviteResult');
+        return;
+    }
+
+    const btn = document.getElementById('sendInviteBtn');
+    btn.textContent = '⏳ Sending...';
+    btn.disabled = true;
+
+    try {
+        const data = await apiPost('/send_email', { name, email, id: candidateId });
+
+        if (data.error) {
+            setHTML('#inviteResult', `<div style="padding:12px; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; color:var(--danger)">❌ ${data.error}</div>`);
+        } else {
+            let html = `<div style="padding:12px; background:var(--accent-bg, #f0f9ff); border:1px solid var(--accent, #2563eb); border-radius:8px">
+                <strong>✅ Interview invite sent!</strong><br>
+                <span class="text-sm text-muted">🔗 <a href="${data.interview_url}" target="_blank">${data.interview_url}</a></span>`;
+            if (data.email_error) {
+                html += `<br><small style="color:#d97706">⚠️ Email delivery failed: ${data.email_error}</small>`;
+            }
+            html += `</div>`;
+            setHTML('#inviteResult', html);
+        }
+        show('#inviteResult');
+    } catch (err) {
+        setHTML('#inviteResult', `<div style="padding:12px; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; color:var(--danger)">❌ Failed to send invite: ${err.message}</div>`);
+        show('#inviteResult');
+    } finally {
+        btn.textContent = '🎤 Send Interview Invite';
+        btn.disabled = false;
+    }
+}
+
 /* ---------- Work Experience ---------- */
 function renderWorkExperience(c) {
     const exp = c.work_experience || [];

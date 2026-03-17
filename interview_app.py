@@ -1051,7 +1051,7 @@ def list_candidates():
 
 # ---- START: Ported from interview_app_old — Job management, candidate search, candidate detail endpoints for merged UI ----
 
-jobs_table = db.table("jobs")
+jobs_table = _db.table("jobs")
 
 @app.post("/upload_job")
 async def upload_job(file: UploadFile = File(...), title: str = Form("")):
@@ -2057,7 +2057,7 @@ def compute_category_scores(skill_scores, skill_categories):
 from api.recruiter_api import router as recruiter_router, init as init_recruiter
 from api.candidate_api import router as candidate_router, init as init_candidate
 
-init_recruiter(db, candidates_table, extract_pdf_text, extract_jd_skills, llm)
+init_recruiter(_db, candidates_table, extract_pdf_text, extract_jd_skills, llm)
 init_candidate(candidates_table, llm, compute_skill_scores)
 
 app.include_router(recruiter_router)
