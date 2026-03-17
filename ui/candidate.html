@@ -1,0 +1,90 @@
+<!-- Added by Ishita — Candidate detail page with tabs: Profile, Job Matches, Interview, Report -->
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Candidate Detail — AI Interview Platform</title>
+      <link rel="stylesheet" href="/ui/style.css">
+   </head>
+   <body>
+      <!-- Nav Bar -->
+      <nav class="navbar">
+         <div class="nav-brand">🤖 AI Interview Platform</div>
+         <div class="nav-links">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/" class="nav-link" onclick="localStorage.setItem('showSection','candidatesSection')">Candidates</a>
+            <a href="/" class="nav-link" onclick="localStorage.setItem('showSection','jobsSection')">Jobs</a>
+         </div>
+         <div class="nav-search">
+            <input type="text" id="globalSearch" placeholder="Search candidates..." onkeydown="if(event.key==='Enter') window.location='/?q='+this.value">
+         </div>
+      </nav>
+
+      <div class="container">
+         <!-- Loading -->
+         <div id="loading" class="empty-state">Loading candidate data...</div>
+
+         <!-- Error -->
+         <div id="errorState" class="empty-state hidden">Candidate not found.</div>
+
+         <!-- Header -->
+         <div id="candidateHeader" class="candidate-header hidden">
+            <div style="flex:1">
+               <span class="candidate-id" id="detailId"></span>
+               <h1 class="candidate-name" id="detailName"></h1>
+               <span class="candidate-exp" id="detailExp"></span>
+               <span class="status-pill" id="detailStatus" style="margin-left: 12px;"></span>
+               <div class="ai-summary-box" id="detailSummary"></div>
+            </div>
+            <!-- Added by Ishita — Send invite from candidate detail page -->
+            <div class="header-actions">
+               <button id="detailInviteBtn" class="btn-accent" onclick="sendInviteFromDetail()">📩 Send Interview Invite</button>
+               <div id="detailInviteResult" class="hidden invite-link-box"></div>
+            </div>
+         </div>
+
+         <!-- Tabs -->
+         <div id="tabsContainer" class="hidden">
+            <div class="tabs">
+               <button class="tab-btn active" onclick="switchTab('profile')">Profile</button>
+               <button class="tab-btn" onclick="switchTab('matches')">Job Matches</button>
+               <button class="tab-btn" onclick="switchTab('interview')">Interview</button>
+               <button class="tab-btn" onclick="switchTab('report')">Report</button>
+            </div>
+
+            <!-- Profile Tab -->
+            <div id="tab-profile" class="tab-content active">
+               <h3>Skills</h3>
+               <div class="card-skills" id="detailSkills" style="margin: 12px 0;"></div>
+
+               <h3 style="margin-top: 20px;">Resume</h3>
+               <details>
+                  <summary style="cursor:pointer; color:#4361ee; font-weight:600;">Show full resume text</summary>
+                  <div class="resume-box" id="detailResume"></div>
+               </details>
+            </div>
+
+            <!-- Job Matches Tab -->
+            <div id="tab-matches" class="tab-content">
+               <div id="matchesContent"></div>
+            </div>
+
+            <!-- Interview Tab -->
+            <div id="tab-interview" class="tab-content">
+               <div id="interviewContent"></div>
+            </div>
+
+            <!-- Report Tab -->
+            <div id="tab-report" class="tab-content">
+               <div id="reportContent">
+                  <button class="btn-primary" onclick="loadReport()">Generate Interview Report</button>
+                  <div id="reportData"></div>
+               </div>
+            </div>
+         </div>
+      </div>
+
+      <script src="/ui/candidate.js"></script>
+   </body>
+</html>

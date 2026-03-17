@@ -126,6 +126,13 @@ async def startup_event():
 # =========================
 
 app.mount("/ui", StaticFiles(directory="ui"), name="ui")
+
+# ---- START: Ishita - Added static mounts for shared, recruiter, candidate UI folders ----
+app.mount("/shared", StaticFiles(directory="shared"), name="shared")
+app.mount("/recruiter/static", StaticFiles(directory="recruiter"), name="recruiter_static")
+app.mount("/candidate/static", StaticFiles(directory="candidate"), name="candidate_static")
+# ---- END: Ishita - Added static mounts for shared, recruiter, candidate UI folders ----
+
 @app.get("/")
 def home():
     return FileResponse("ui/index.html")
@@ -133,6 +140,20 @@ def home():
 @app.get("/interview")
 def interview_page():
     return FileResponse("ui/interview.html")
+
+# ---- START: Ishita - Added recruiter dashboard and candidate profile page routes ----
+@app.get("/recruiter")
+def recruiter_page():
+    return FileResponse("recruiter/recruiter.html")
+
+@app.get("/candidate")
+def candidate_page():
+    return FileResponse("candidate/candidate.html")
+
+@app.get("/candidate.html")
+def candidate_page_legacy():
+    return FileResponse("ui/candidate.html")
+# ---- END: Ishita - Added recruiter dashboard and candidate profile page routes ----
 
 # =========================
 # Database (thread-safe wrapper)
@@ -224,7 +245,7 @@ if os.path.exists(RAG_INDEX):
     index = faiss.read_index(RAG_INDEX)
     knowledge_texts = np.load(RAG_TEXT, allow_pickle=True).tolist()
 else:
-    dim = 1024
+    dim = 1536   # ✅ FIXED
     index = faiss.IndexFlatL2(dim)
 
 
@@ -233,19 +254,16 @@ else:
 # =========================
 
 def embed(text):
-
-    body = json.dumps({"inputText": text})
-
     response = bedrock.invoke_model(
-        modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-        body=body,
+        modelId="amazon.titan-embed-text-v1",
+        body=json.dumps({
+            "inputText": text
+        }),
         contentType="application/json",
         accept="application/json"
     )
-
     result = json.loads(response["body"].read())
-
-    return np.array(result["embedding"], dtype="float32")
+    return np.array(result["embedding"])
 
 
 def search_knowledge(query):
@@ -1029,6 +1047,154 @@ def list_candidates():
         "total_candidates": len(result),
         "candidates": result
     }
+
+
+# ---- START: Ported from interview_app_old — Job management, candidate search, candidate detail endpoints for merged UI ----
+
+jobs_table = db.table("jobs")
+
+@app.post("/upload_job")
+async def upload_job(file: UploadFile = File(...), title: str = Form("")):
+    import uuid as _uuid
+    job_id = f"JOB-{_uuid.uuid4().hex[:6]}"
+    safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', file.filename or "jd")
+    path = os.path.join(UPLOAD_DIR, f"jd_{job_id}_{safe_name}")
+    with open(path, "wb") as f:
+        f.write(await file.read())
+    jd_text = extract_pdf_text(path)
+    jd_skills = extract_jd_skills(jd_text)
+    if not title:
+        title_prompt = (
+            f"Extract the job title from this job description in 5 words or less. "
+            f"Return only the title, nothing else.\n\n{jd_text[:500]}"
+        )
+        title = llm(title_prompt).strip().strip('"')
+    job_data = {
+        "job_id": job_id,
+        "title": title,
+        "jd_text": jd_text,
+        "jd_skills": jd_skills,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    Job = Query()
+    jobs_table.upsert(job_data, Job.job_id == job_id)
+    return {"job_id": job_id, "title": title, "jd_skills": jd_skills}
+
+
+def ai_skill_match(candidate_skills, jd_skills):
+    prompt = f"""
+You are an expert recruiter. Compare candidate skills with job requirements.
+
+Candidate skills: {json.dumps(candidate_skills)}
+Job required skills: {json.dumps(jd_skills)}
+
+Do fuzzy matching: "Spring" matches "Spring Boot", "K8s" matches "Kubernetes", "JS" matches "JavaScript", etc.
+
+Return JSON:
+{{"matched_skills": ["skills from JD that the candidate has or closely matches"],
+"missing_skills": ["skills from JD that the candidate lacks"],
+"match_percent": number (0-100)}}
+"""
+    return extract_json_object(llm(prompt))
+
+
+def generate_candidate_summary(candidate_data, jd_skills=None):
+    skills = candidate_data.get("candidate_skills", [])
+    years = candidate_data.get("years_experience", 0)
+    name = candidate_data.get("name", "")
+    context = f"Candidate: {name}\nSkills: {', '.join(skills)}\nExperience: {years} years"
+    if jd_skills:
+        context += f"\nJob requires: {', '.join(jd_skills)}"
+    prompt = f"""
+Write a 2-sentence professional summary of this candidate's fit for the role. Be specific about strengths and gaps.
+
+{context}
+
+Return only the summary text, no JSON.
+"""
+    return llm(prompt).strip()
+
+
+@app.post("/match_job/{job_id}")
+def match_job(job_id: str):
+    Job = Query()
+    job = jobs_table.get(Job.job_id == job_id)
+    if not job:
+        return {"error": "Job not found"}
+    jd_skills = job.get("jd_skills", [])
+    all_candidates = candidates_table.all()
+    results = []
+    for cand in all_candidates:
+        cand_skills = cand.get("candidate_skills", [])
+        if not cand_skills:
+            continue
+        match_result = ai_skill_match(cand_skills, jd_skills)
+        ai_summary = generate_candidate_summary(cand, jd_skills)
+        results.append({
+            "candidate_id": cand.get("id", cand.get("candidate_id", "")),
+            "name": cand.get("name", ""),
+            "candidate_skills": cand_skills,
+            "years_experience": cand.get("years_experience", 0),
+            "matched_skills": match_result.get("matched_skills", []),
+            "missing_skills": match_result.get("missing_skills", []),
+            "match_percent": match_result.get("match_percent", 0),
+            "ai_summary": ai_summary,
+            "status": cand.get("status", "new"),
+        })
+    results.sort(key=lambda x: x["match_percent"], reverse=True)
+    return {
+        "job_id": job_id,
+        "title": job.get("title", ""),
+        "jd_skills": jd_skills,
+        "candidates": results,
+    }
+
+
+@app.get("/jobs")
+def list_jobs():
+    all_jobs = jobs_table.all()
+    results = []
+    for j in all_jobs:
+        job_id = j.get("job_id", "")
+        matched_count = 0
+        for c in candidates_table.all():
+            for m in c.get("job_matches", []):
+                if m.get("job_id") == job_id:
+                    matched_count += 1
+                    break
+        results.append({
+            "job_id": job_id,
+            "title": j.get("title", ""),
+            "jd_skills": j.get("jd_skills", []),
+            "created_at": j.get("created_at", ""),
+            "candidates_matched": matched_count,
+        })
+    return {"jobs": results}
+
+
+@app.get("/candidates/search")
+def search_candidates_endpoint(q: str = QueryParam("")):
+    if not q:
+        return list_candidates()
+    q_lower = q.lower()
+    all_data = candidates_table.all()
+    results = []
+    for c in all_data:
+        name = c.get("name", "").lower()
+        cid = c.get("id", c.get("candidate_id", "")).lower()
+        skills = [s.lower() for s in c.get("candidate_skills", [])]
+        if q_lower in name or q_lower in cid or any(q_lower in s for s in skills):
+            results.append({
+                "candidate_id": c.get("id", c.get("candidate_id", "")),
+                "name": c.get("name", ""),
+                "candidate_skills": c.get("candidate_skills", []),
+                "years_experience": c.get("years_experience", 0),
+                "status": c.get("status", "new"),
+                "email": c.get("email", ""),
+            })
+    return {"candidates": results, "query": q}
+
+# ---- END: Ported from interview_app_old — Job management, candidate search, candidate detail endpoints ----
 
 
 
@@ -1881,3 +2047,19 @@ def compute_category_scores(skill_scores, skill_categories):
         if scores:
             category_scores[category] = sum(scores) / len(scores)
     return category_scores
+
+
+# ---- START: Ishita - Mounted new API routers for recruiter and candidate endpoints ----
+# =========================
+# Mount New Routers
+# =========================
+
+from api.recruiter_api import router as recruiter_router, init as init_recruiter
+from api.candidate_api import router as candidate_router, init as init_candidate
+
+init_recruiter(db, candidates_table, extract_pdf_text, extract_jd_skills, llm)
+init_candidate(candidates_table, llm, compute_skill_scores)
+
+app.include_router(recruiter_router)
+app.include_router(candidate_router)
+# ---- END: Ishita - Mounted new API routers for recruiter and candidate endpoints ----

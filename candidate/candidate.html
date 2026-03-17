@@ -1,0 +1,158 @@
+<!-- ---- START: Ishita - New candidate profile page with progress stepper, AI interview analysis, JD match, skills, transcript, work experience ---- -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Profile — AI Hiring Platform</title>
+    <link rel="stylesheet" href="/shared/shared.css">
+    <link rel="stylesheet" href="/candidate/static/candidate.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+    <div class="logo">🧠 AI Hiring Platform</div>
+    <div class="nav-links">
+        <a href="/recruiter">← Back to Dashboard</a>
+        <a href="/">Legacy View</a>
+    </div>
+</header>
+
+<div class="candidate-page">
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center mt-6">
+        <div class="spinner"></div>
+        <p class="text-muted mt-4">Loading candidate profile...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="hidden text-center mt-6">
+        <h2 style="color:var(--danger)">Candidate Not Found</h2>
+        <p class="text-muted">The candidate ID is invalid or was not found.</p>
+        <a href="/recruiter" class="btn btn-primary mt-4">← Back to Dashboard</a>
+    </div>
+
+    <!-- Profile Content -->
+    <div id="profileContent" class="hidden">
+
+        <!-- Profile Header -->
+        <div class="profile-header">
+            <div class="profile-header-left">
+                <div class="profile-avatar" id="profileAvatar"></div>
+                <div>
+                    <h1 id="profileName" class="profile-name"></h1>
+                    <div class="profile-meta" id="profileMeta"></div>
+                    <div class="profile-key" id="profileKey"></div>
+                </div>
+            </div>
+            <div class="profile-header-right">
+                <!-- <button class="btn btn-primary" onclick="generateReport()" id="generateReportBtn">📄 Generate Report</button> -->
+                <div id="profileScoreBadge"></div>
+            </div>
+        </div>
+
+        <!-- Report Section -->
+        <div class="card hidden" id="reportSection">
+            <div class="card-header">
+                <h2>📄 Interview Report</h2>
+                <button class="btn btn-outline btn-sm" onclick="closeReport()">✕ Close</button>
+            </div>
+            <div id="reportLoading" class="hidden" style="text-align:center; padding:20px">
+                <div class="spinner"></div>
+                <p class="text-muted mt-4">Generating interview report...</p>
+            </div>
+            <div class="dashboard-grid mt-6 hidden" id="reportChartSection">
+                <div class="chart-card"><h3>Skill Radar</h3><canvas id="rptSkillRadar"></canvas></div>
+                <div class="chart-card"><h3>Score Trend</h3><canvas id="rptScoreTrend"></canvas></div>
+                <div class="chart-card"><h3>Skill Scores</h3><canvas id="rptSkillScores"></canvas></div>
+            </div>
+            <pre class="result-box mt-4 hidden" id="reportOutput" style="max-height:400px; overflow:auto"></pre>
+        </div>
+
+        <!-- Progress Stepper -->
+        <div class="card">
+            <h2>📋 Candidature Progress</h2>
+            <div id="progressStepper"></div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="stats-grid" id="quickStats"></div>
+
+        <!-- Matching JDs / Job IDs -->
+        <div class="card">
+            <h2>💼 Matching JD & Job Analysis</h2>
+            <div id="jdMatchSection"></div>
+        </div>
+
+        <!-- Skills Overview -->
+        <div class="card">
+            <h2>🛠️ Skills Overview</h2>
+            <div id="skillsOverview"></div>
+        </div>
+
+        <!-- AI Interview Analysis -->
+        <div class="card">
+            <h2>🤖 AI Interview Analysis</h2>
+            <div id="interviewAnalysis"></div>
+            <div class="dashboard-grid mt-6" id="chartSection">
+                <div class="chart-card"><h3>Skill Radar</h3><canvas id="cSkillRadar"></canvas></div>
+                <div class="chart-card"><h3>Score Trend</h3><canvas id="cScoreTrend"></canvas></div>
+                <div class="chart-card"><h3>Skill Scores</h3><canvas id="cSkillScores"></canvas></div>
+                <div class="chart-card"><h3>Strengths vs Weaknesses</h3><canvas id="cStrengthWeakness"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Interview Transcript -->
+        <div class="card">
+            <div class="card-header">
+                <h2>📝 Interview Transcript</h2>
+                <div style="display:flex; gap:8px">
+                    <button class="btn btn-primary btn-sm" onclick="toggleUploadTranscript()">📤 Upload Transcript</button>
+                    <button class="btn btn-outline btn-sm" onclick="toggleTranscript()">Show/Hide</button>
+                </div>
+            </div>
+
+            <!-- Upload Transcript Form -->
+            <div id="uploadTranscriptForm" class="hidden" style="padding:16px; border:1px dashed var(--border); border-radius:8px; margin-bottom:16px">
+                <p class="text-muted text-sm mb-4">Paste or upload an interview transcript. The AI will parse and structure it automatically.</p>
+                <label>Upload Transcript File (TXT / JSON)</label>
+                <input type="file" id="transcriptFile" accept=".txt,.json" onchange="handleTranscriptFile(event)">
+                <label class="mt-4">Or Paste Transcript Text</label>
+                <textarea id="transcriptText" rows="6" placeholder="Paste the raw interview transcript here..." style="width:100%; padding:10px; border:1px solid var(--border); border-radius:6px; font-size:14px; resize:vertical"></textarea>
+                <div class="flex gap-2 mt-4">
+                    <button class="btn btn-primary" onclick="submitTranscript()">Submit Transcript</button>
+                    <button class="btn btn-outline" onclick="toggleUploadTranscript()">Cancel</button>
+                </div>
+                <div id="transcriptUploadLoading" class="hidden mt-4" style="text-align:center">
+                    <div class="spinner"></div>
+                    <span class="text-muted text-sm" style="margin-left:10px">Processing transcript with AI...</span>
+                </div>
+                <div id="transcriptUploadResult" class="mt-4"></div>
+            </div>
+
+            <div id="transcriptSection" class="hidden"></div>
+        </div>
+
+        <!-- Work Experience -->
+        <div class="card">
+            <h2>💼 Work Experience</h2>
+            <div id="workExperience"></div>
+        </div>
+
+        <!-- Education & Certifications -->
+        <div class="card">
+            <h2>🎓 Education & Certifications</h2>
+            <div id="educationSection"></div>
+        </div>
+
+    </div>
+</div>
+
+<script src="/shared/shared.js"></script>
+<script src="/candidate/static/candidate.js"></script>
+</body>
+</html>
+<!-- ---- END: Ishita - New candidate profile page ---- -->
