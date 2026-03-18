@@ -628,14 +628,18 @@ def gap(candidate):
     data = get_candidate(candidate)
     if not data:
         return {"error": "Candidate not found"}
-    cskills = set(data.get("candidate_skills", []))
-    jskills = set(data.get("jd_skills", []))
+    cskills = data.get("candidate_skills", [])
+    jskills = data.get("jd_skills", [])
+
+    if not jskills:
+        return {"matched_skills": [], "missing_skills": [], "match_percent": 0}
+
+    result = ai_skill_match(cskills, jskills)
 
     return {
-
-        "matched_skills": list(cskills & jskills),
-        "missing_skills": list(jskills - cskills),
-        "match_percent": round(len(cskills & jskills) / len(jskills) * 100, 2)
+        "matched_skills": result.get("matched_skills", []),
+        "missing_skills": result.get("missing_skills", []),
+        "match_percent": result.get("match_percent", 0)
     }
 
 
@@ -1047,7 +1051,8 @@ def list_candidates():
         result.append({
             "candidate_id": c.get("id"),
             "name": c.get("name"),
-            "skills": c.get("candidate_skills", [])
+            "skills": c.get("candidate_skills", []),
+            "years_experience": c.get("years_experience", 0)
         })
     return {
         "total_candidates": len(result),
@@ -1094,7 +1099,16 @@ You are an expert recruiter. Compare candidate skills with job requirements.
 Candidate skills: {json.dumps(candidate_skills)}
 Job required skills: {json.dumps(jd_skills)}
 
-Do fuzzy matching: "Spring" matches "Spring Boot", "K8s" matches "Kubernetes", "JS" matches "JavaScript", etc.
+MATCHING RULES (apply ALL of these):
+1. Exact match: "Java" matches "Java"
+2. Version match: "Java" matches "Java 8", "Java 11", "Java 17", "Java SE". Any versioned variant of a skill matches the base skill.
+3. Subset/superset: "Spring" matches "Spring Boot", "Spring MVC", "Spring Framework"
+4. Abbreviations: "K8s" matches "Kubernetes", "JS" matches "JavaScript", "TS" matches "TypeScript", "AWS" matches "Amazon Web Services"
+5. Related variants: "React" matches "React.js" or "ReactJS", "Node" matches "Node.js", "Postgres" matches "PostgreSQL"
+6. If the JD says "Java" and the candidate has "Java 8" or "Java 17", that IS a match.
+7. If the JD says "Python" and the candidate has "Python 3", that IS a match.
+
+Be GENEROUS with matching — if the candidate clearly has experience with the technology, count it as matched.
 
 Return JSON:
 {{"matched_skills": ["skills from JD that the candidate has or closely matches"],
@@ -1230,14 +1244,11 @@ def search_candidates_endpoint(q: str = QueryParam("")):
 
 
 def compute_match_score(candidate_skills, jd_skills):
-    cskills = set([s.lower() for s in candidate_skills])
-    jskills = set([s.lower() for s in jd_skills])
-    matched = cskills & jskills
-    if not jskills:
+    """Use LLM-based fuzzy matching via ai_skill_match."""
+    if not jd_skills:
         return 0
-
-    score = len(matched) / len(jskills)
-    return round(score * 100, 2)
+    result = ai_skill_match(candidate_skills, jd_skills)
+    return result.get("match_percent", 0)
 
 
 # =========================
